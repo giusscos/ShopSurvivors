@@ -19,7 +19,7 @@ struct PauseOverlayView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         legendRow("Cyan XP gems", "Pick up for level-ups")
                         legendRow("Orange LURE", "Draws clerks away from your friend")
-                        legendRow("TAG / RCP / LASER / BAG", "Auto-weapons")
+                        legendRow("AURA / RCP / LASER / BAG", "Auto-weapons")
                         legendRow("Pitch text", "Clerk draining budget near friend")
                         legendRow("Bump clerks", "Walk into them to shove them")
                         legendRow("Unlock stores", "Survive the timer with $ left")

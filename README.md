@@ -46,7 +46,7 @@ First store run shows a short **tutorial overlay** (skippable). Replay it anytim
 
 | Store | Duration | Starting budget | Starting weapon |
 |-------|----------|-----------------|-----------------|
-| Electronics Megamart | 2:00 | $120 | Price Tags |
+| Electronics Megamart | 2:00 | $120 | Price Aura |
 | Fashion Boutique | 2:30 | $100 | Receipts |
 | Grocery Warehouse | 3:00 | $80 | Shopping Bag |
 
@@ -69,7 +69,7 @@ First store run shows a short **tutorial overlay** (skippable). Replay it anytim
 
 | Short | Name | Behavior |
 |-------|------|----------|
-| TAG | Price Tags | Orbiting tags |
+| AURA | Price Aura | Small damage ring around you |
 | RCP | Receipts | Projectiles at nearest clerks |
 | LASER | Barcode Laser | Sweeping beam |
 | BAG | Shopping Bag | Knockback pulse around you |
@@ -148,10 +148,11 @@ python3 scripts/generate_sfx.py
 - Companion **does not follow** the player in-store; they browse shelves (in the mall hub they follow you)
 - Shelves are **solid** (no walking through)
 - Music/SFX use `.playback` (play even with the mute switch); toggles in Settings and pause
-- HUD labels: `YOU`, `FRIEND`, `+XP`, `LURE`, weapon short names (labels stay readable when facing left)
+- HUD labels: `YOU`, `FRIEND`, `+XP`, `LURE` (labels stay readable when facing left)
 - Pause menu includes a short legend plus music/SFX toggles
 - Title has **How to Play** and **Settings**; first store entry can show coaching steps
 - First launch plays a **4-panel manga lore intro** (vignette + light motion); skipped after that, replayable in Settings
+- SpriteKit views request **120 fps**; ProMotion iPhones unlock it via `CADisableMinimumFrameDurationOnPhone`
 
 ---
 

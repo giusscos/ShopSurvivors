@@ -20,12 +20,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private var spawnTimer: TimeInterval = 0
     private var weaponCooldowns: [WeaponKind: TimeInterval] = [:]
-    private var orbitAngle: CGFloat = 0
     private var elapsed: TimeInterval = 0
     private var pitchBannerTimer: TimeInterval = 0
     private var cameraNode = SKCameraNode()
     private var shakeTime: TimeInterval = 0
 
+    private var priceAuraRing: SKShapeNode?
+    private var priceAuraRadius: CGFloat = 0
     private var aimGhost: SKNode?
     private var arenaSize = CGSize(width: 1400, height: 900)
     private var shoveSFXCooldown: TimeInterval = 0
@@ -187,6 +188,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         updateBudgetDrain(dt: dt, session: session)
         updateSpawner(dt: dt, session: session)
         updateWeapons(dt: dt, session: session)
+        syncPriceAura(session: session)
         updateProjectiles(dt: dt)
         updateCoupons(dt: dt, session: session)
         updateXPOrbs(dt: dt, session: session)
@@ -584,7 +586,6 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func updateWeapons(dt: TimeInterval, session: GameSession) {
-        orbitAngle += CGFloat(dt) * 2.8
         for weapon in session.weapons {
             let cd = weaponCooldowns[weapon.kind, default: 0] - dt
             weaponCooldowns[weapon.kind] = cd
@@ -594,27 +595,47 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
+    private func syncPriceAura(session: GameSession) {
+        guard let owned = session.weapons.first(where: { $0.kind == .priceTags }) else {
+            priceAuraRing?.removeFromParent()
+            priceAuraRing = nil
+            priceAuraRadius = 0
+            return
+        }
+        let radius = owned.kind.auraRadius(level: owned.level)
+        if priceAuraRing == nil {
+            let ring = SKShapeNode(circleOfRadius: radius)
+            ring.strokeColor = SKColor(red: 0.35, green: 0.9, blue: 0.95, alpha: 0.55)
+            ring.lineWidth = 2
+            ring.fillColor = SKColor(red: 0.3, green: 0.85, blue: 0.95, alpha: 0.1)
+            ring.zPosition = 18
+            ring.name = "priceAura"
+            entityNode.addChild(ring)
+            priceAuraRing = ring
+            priceAuraRadius = radius
+            ring.run(SKAction.repeatForever(SKAction.sequence([
+                SKAction.fadeAlpha(to: 0.55, duration: 0.55),
+                SKAction.fadeAlpha(to: 0.9, duration: 0.55)
+            ])))
+        } else if abs(priceAuraRadius - radius) > 0.5 {
+            priceAuraRing?.path = CGPath(
+                ellipseIn: CGRect(x: -radius, y: -radius, width: radius * 2, height: radius * 2),
+                transform: nil
+            )
+            priceAuraRadius = radius
+        }
+        priceAuraRing?.position = player.position
+    }
+
     private func fireWeapon(_ owned: OwnedWeapon, session: GameSession) {
         let dmg = owned.kind.damage(level: owned.level)
         switch owned.kind {
         case .priceTags:
-            let count = owned.kind.orbitCount(level: owned.level)
-            let radius: CGFloat = 55 + CGFloat(owned.level) * 6
-            for i in 0..<count {
-                let ang = orbitAngle + CGFloat(i) * (.pi * 2 / CGFloat(count))
-                let proj = ProjectileNode(weapon: .priceTags, damage: dmg, life: 0.4, pierce: 3)
-                proj.position = CGPoint(
-                    x: player.position.x + cos(ang) * radius,
-                    y: player.position.y + sin(ang) * radius
-                )
-                proj.zRotation = ang
-                entityNode.addChild(proj)
-                projectiles.append(proj)
-            }
+            let radius = owned.kind.auraRadius(level: owned.level)
             for clerk in clerks {
                 let dist = hypot(clerk.position.x - player.position.x, clerk.position.y - player.position.y)
-                if abs(dist - radius) < 28 {
-                    hitClerk(clerk, damage: dmg, from: player.position, session: session)
+                if dist <= radius {
+                    hitClerk(clerk, damage: dmg, from: player.position, session: session, knockbackStrength: 90)
                 }
             }
 
@@ -662,12 +683,6 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             pulse.position = player.position
             pulse.zPosition = 24
             entityNode.addChild(pulse)
-            let bagLabel = SKLabelNode(fontNamed: "Menlo-Bold")
-            bagLabel.text = "BAG PULSE"
-            bagLabel.fontSize = 10
-            bagLabel.fontColor = .white
-            bagLabel.position = CGPoint(x: 0, y: 0)
-            pulse.addChild(bagLabel)
             pulse.run(SKAction.sequence([
                 SKAction.group([
                     SKAction.fadeOut(withDuration: 0.35),

@@ -29,26 +29,6 @@ final class ProjectileNode: SKSpriteNode {
         physicsBody?.categoryBitMask = PhysicsCategory.projectile
         physicsBody?.collisionBitMask = PhysicsCategory.none
         physicsBody?.contactTestBitMask = PhysicsCategory.clerk
-
-        // Short readable tag so projectiles aren't mystery blobs
-        let short: String = switch weapon {
-        case .priceTags: "TAG"
-        case .receipts: "RCP"
-        case .barcodeLaser: "LASER"
-        case .shoppingBag: "BAG"
-        }
-        let tag = SKLabelNode(fontNamed: "Menlo-Bold")
-        tag.text = short
-        tag.fontSize = 8
-        tag.fontColor = .white
-        tag.verticalAlignmentMode = .center
-        tag.horizontalAlignmentMode = .center
-        tag.position = CGPoint(x: 0, y: size.height * 0.55 + 6)
-        tag.zPosition = 2
-        // Laser beam is large — skip cluttered label
-        if weapon != .barcodeLaser {
-            addChild(tag)
-        }
     }
 
     @available(*, unavailable)

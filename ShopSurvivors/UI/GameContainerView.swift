@@ -20,7 +20,7 @@ struct GameContainerView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                SpriteView(scene: scene, options: [.allowsTransparency])
+                SpriteView(scene: scene, preferredFramesPerSecond: 120, options: [.allowsTransparency])
                     .ignoresSafeArea()
 
                 VStack {

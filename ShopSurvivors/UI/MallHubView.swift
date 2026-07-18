@@ -16,7 +16,7 @@ struct MallHubView: View {
 
     var body: some View {
         ZStack {
-            SpriteView(scene: scene, options: [.allowsTransparency])
+            SpriteView(scene: scene, preferredFramesPerSecond: 120, options: [.allowsTransparency])
                 .ignoresSafeArea()
                 .id(session.unlockedStoreIndex)
 

@@ -11,7 +11,7 @@ enum WeaponKind: String, CaseIterable, Identifiable, Codable {
 
     var displayName: String {
         switch self {
-        case .priceTags: "Price Tags"
+        case .priceTags: "Price Aura"
         case .receipts: "Receipts"
         case .barcodeLaser: "Barcode Laser"
         case .shoppingBag: "Shopping Bag"
@@ -20,7 +20,7 @@ enum WeaponKind: String, CaseIterable, Identifiable, Codable {
 
     var shortLabel: String {
         switch self {
-        case .priceTags: "TAG"
+        case .priceTags: "AURA"
         case .receipts: "RCP"
         case .barcodeLaser: "LASER"
         case .shoppingBag: "BAG"
@@ -29,7 +29,7 @@ enum WeaponKind: String, CaseIterable, Identifiable, Codable {
 
     var blurb: String {
         switch self {
-        case .priceTags: "Orbiting tags that slice clerks"
+        case .priceTags: "Small damage ring around you"
         case .receipts: "Fire paper projectiles at nearest clerks"
         case .barcodeLaser: "Sweeping laser beam"
         case .shoppingBag: "Pulse knockback around you"
@@ -65,8 +65,9 @@ enum WeaponKind: String, CaseIterable, Identifiable, Codable {
         return max(0.12, base * pow(0.92, Double(level - 1)))
     }
 
-    func orbitCount(level: Int) -> Int {
-        min(1 + level, 6)
+    /// Close-range aura (Price Aura). Kept well below LURE's 140 radius.
+    func auraRadius(level: Int) -> CGFloat {
+        42 + CGFloat(level - 1) * 5
     }
 }
 
