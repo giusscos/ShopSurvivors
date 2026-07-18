@@ -3,6 +3,7 @@ import SwiftUI
 struct PauseOverlayView: View {
     @ObservedObject var session: GameSession
     @State private var musicOn = AudioManager.shared.musicEnabled
+    @State private var sfxOn = AudioManager.shared.sfxEnabled
 
     var body: some View {
         ZStack {
@@ -29,20 +30,31 @@ struct PauseOverlayView: View {
                 .background(Color.white.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                Toggle("Music", isOn: $musicOn)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .tint(Color(red: 1.0, green: 0.55, blue: 0.25))
-                    .frame(maxWidth: 200)
-                    .onChange(of: musicOn) { _, on in
-                        AudioManager.shared.musicEnabled = on
-                        if on {
-                            AudioManager.shared.playMusic(forceRestart: true)
+                VStack(spacing: 8) {
+                    Toggle("Music", isOn: $musicOn)
+                        .onChange(of: musicOn) { _, on in
+                            AudioManager.shared.musicEnabled = on
+                            AudioManager.shared.playSFX(.ui)
+                            if on {
+                                AudioManager.shared.playMusic(forceRestart: true)
+                            }
                         }
-                    }
+                    Toggle("Sound Effects", isOn: $sfxOn)
+                        .onChange(of: sfxOn) { _, on in
+                            AudioManager.shared.sfxEnabled = on
+                            if on {
+                                AudioManager.shared.playSFX(.ui)
+                            }
+                        }
+                }
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+                .tint(Color(red: 1.0, green: 0.55, blue: 0.25))
+                .frame(maxWidth: 220)
 
                 HStack(spacing: 12) {
                     Button {
+                        AudioManager.shared.playSFX(.ui)
                         session.resume()
                     } label: {
                         Text("Resume")
@@ -55,6 +67,7 @@ struct PauseOverlayView: View {
                     }
 
                     Button {
+                        AudioManager.shared.playSFX(.ui)
                         session.goLevelSelect()
                     } label: {
                         Text("Quit Store")
@@ -77,7 +90,7 @@ struct PauseOverlayView: View {
         }
         .onAppear {
             musicOn = AudioManager.shared.musicEnabled
-            // Keep soundtrack audible while paused (toggle still works).
+            sfxOn = AudioManager.shared.sfxEnabled
             if musicOn {
                 AudioManager.shared.playMusic()
             }

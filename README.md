@@ -20,13 +20,16 @@ Clerks path toward your **friend** (companion). When they get close, they pitch 
 
 ## How to play
 
-1. **Title** → Enter the Mall → **Choose a store**
-2. Move with the **left joystick**
-3. Your **FRIEND** browses the store on their own — protect them
-4. **Walk into clerks** to shove them away
-5. **Hold LURE** and drag onto the floor, release to drop a coupon that draws clerks away
-6. Defeat clerks → pick up **+XP** gems → level up → pick an upgrade
-7. Survive until the timer ends with money left
+1. **Title** → How to Play / Settings, or **Enter the Mall**
+2. In the **mall corridor**, walk (or tap) into a store door with your friend
+3. Move with the **left joystick**
+4. Your **FRIEND** browses the store on their own — protect them
+5. **Walk into clerks** to shove them away
+6. **Hold LURE** and drag onto the floor, release to drop a coupon that draws clerks away
+7. Defeat clerks → pick up **+XP** gems → level up → pick an upgrade
+8. Survive until the timer ends with money left
+
+First run shows a short **tutorial overlay** (skippable). Replay it anytime from **Settings**.
 
 ### Controls
 
@@ -34,7 +37,7 @@ Clerks path toward your **friend** (companion). When they get close, they pitch 
 |---------|--------|
 | Left joystick | Move (works while aiming a coupon) |
 | Hold LURE + drag | Place coupon; release to drop |
-| Pause (top right) | Pause, legend, music toggle, quit |
+| Pause (top right) | Pause, legend, music/SFX toggles, quit |
 
 ---
 
@@ -46,7 +49,7 @@ Clerks path toward your **friend** (companion). When they get close, they pitch 
 | Fashion Boutique | 2:30 | $100 | Receipts |
 | Grocery Warehouse | 3:00 | $80 | Shopping Bag |
 
-**Unlocking:** Clear a store (timer ends, budget &gt; 0) to unlock the next. Progress is saved locally.
+**Unlocking:** Clear a store (timer ends, budget &gt; 0) to unlock the next. Progress is saved locally. Locked doors stay closed in the mall corridor until you clear the previous store.
 
 ---
 
@@ -94,9 +97,9 @@ Unlocked / upgraded via XP level-up cards.
 
 ## Tech stack
 
-- **SwiftUI** — menus, HUD, pause, upgrades, results
-- **SpriteKit** — arena, entities, combat, spawning
-- **AVFoundation** — looping retro soundtrack (`mall_survivors_theme.wav`)
+- **SwiftUI** — menus, HUD, pause, upgrades, results, settings, tutorial
+- **SpriteKit** — mall hub, arena, entities, combat, spawning
+- **AVFoundation** — looping soundtrack + short SFX (`mall_survivors_theme.wav`, `sfx_*.wav`)
 - **Landscape only** (iPhone & iPad)
 - Target: iOS 18.6+
 
@@ -106,17 +109,19 @@ Unlocked / upgraded via XP level-up cards.
 ShopSurvivors/
   ContentView.swift              # Screen router
   ShopSurvivorsApp.swift
-  UI/                            # Title, level select, HUD, pause, results
+  UI/                            # Title, hub, HUD, pause, settings, tutorial, results
   Game/
     GameScene.swift              # Core loop
+    StoreHubScene.swift          # Walkable mall corridor
     Data/                        # Stores, weapons, clerks, session
     Entities/                    # Player, companion, clerks, projectiles, XP, coupon
     Systems/WalkAnimator.swift
     Audio/AudioManager.swift
     HUD/VirtualJoystick.swift
   Assets.xcassets/               # Pixel sprites + app icon
-  Resources/mall_survivors_theme.wav
+  Resources/                     # Theme + SFX wavs
 scripts/generate_assets.py       # Regenerate pixel art
+scripts/generate_sfx.py          # Regenerate SFX wavs
 ```
 
 ---
@@ -129,15 +134,22 @@ Pixel-art sprites (player, friend, 4 clerks, walk cycles, projectiles, coupon, X
 python3 scripts/generate_assets.py
 ```
 
+Regenerate sound effects with:
+
+```bash
+python3 scripts/generate_sfx.py
+```
+
 ---
 
 ## Design notes (current build)
 
-- Companion **does not follow** the player; they browse shelves
+- Companion **does not follow** the player in-store; they browse shelves (in the mall hub they follow you)
 - Shelves are **solid** (no walking through)
-- Music uses `.playback` (plays even with the mute switch); toggle in pause
-- HUD labels: `YOU`, `FRIEND`, `+XP`, `LURE`, weapon short names
-- Pause menu includes a short legend and music toggle
+- Music/SFX use `.playback` (play even with the mute switch); toggles in Settings and pause
+- HUD labels: `YOU`, `FRIEND`, `+XP`, `LURE`, weapon short names (labels stay readable when facing left)
+- Pause menu includes a short legend plus music/SFX toggles
+- Title has **How to Play** and **Settings**; first store entry can show coaching steps
 
 ---
 

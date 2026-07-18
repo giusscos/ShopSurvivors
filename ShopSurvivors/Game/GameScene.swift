@@ -28,6 +28,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private var aimGhost: SKNode?
     private var arenaSize = CGSize(width: 1400, height: 900)
+    private var shoveSFXCooldown: TimeInterval = 0
 
     func configure(session: GameSession, store: StoreLevel) {
         self.session = session
@@ -102,15 +103,38 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 height: shelfSize.height - inset * 2
             ))
 
-            // Browse spots beside shelves (not on top)
-            interestPoints.append(CGPoint(x: pos.x + CGFloat.random(in: -50...50), y: pos.y - 44))
+            // Browse spots beside shelves (clear of collision boxes)
+            let sideSpots = [
+                CGPoint(x: pos.x, y: pos.y - 52),
+                CGPoint(x: pos.x, y: pos.y + 52),
+                CGPoint(x: pos.x - 50, y: pos.y),
+                CGPoint(x: pos.x + 50, y: pos.y),
+            ]
+            for spot in sideSpots.shuffled().prefix(2) {
+                let clamped = clampPoint(spot)
+                if isWalkable(clamped, radius: 14) {
+                    interestPoints.append(clamped)
+                }
+            }
         }
 
         for _ in 0..<10 {
-            interestPoints.append(CGPoint(
-                x: CGFloat.random(in: -arenaSize.width / 2 + 100...arenaSize.width / 2 - 100),
-                y: CGFloat.random(in: -arenaSize.height / 2 + 100...arenaSize.height / 2 - 100)
-            ))
+            for _ in 0..<8 {
+                let candidate = CGPoint(
+                    x: CGFloat.random(in: -arenaSize.width / 2 + 100...arenaSize.width / 2 - 100),
+                    y: CGFloat.random(in: -arenaSize.height / 2 + 100...arenaSize.height / 2 - 100)
+                )
+                if isWalkable(candidate, radius: 14) {
+                    interestPoints.append(candidate)
+                    break
+                }
+            }
+        }
+
+        // Drop any browse spots that later shelves covered.
+        interestPoints = interestPoints.filter { isWalkable($0, radius: 14) }
+        if interestPoints.isEmpty {
+            interestPoints.append(.zero)
         }
 
         let border = SKShapeNode(rectOf: arenaSize)
@@ -153,6 +177,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
         let dt: TimeInterval = 1.0 / 60.0
         elapsed += dt
+        shoveSFXCooldown = max(0, shoveSFXCooldown - dt)
 
         updateTimer(dt: dt, session: session)
         updatePlayer(dt: dt, session: session)
@@ -257,6 +282,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 clerk.lureTimeRemaining = 3.5
             }
         }
+        AudioManager.shared.playSFX(.coupon)
     }
 
     // MARK: - Systems
@@ -291,6 +317,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func updateCompanion(dt: TimeInterval) {
+        if companion.chatCooldown > 0 {
+            companion.chatCooldown -= dt
+        }
+
         if companion.browsePause > 0 {
             companion.browsePause -= dt
             companion.setStatus("browsing…")
@@ -299,29 +329,118 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
 
         if companion.browseTarget == nil || reached(companion.position, companion.browseTarget!) {
-            companion.browsePause = TimeInterval.random(in: 0.8...2.2)
-            companion.browseTarget = interestPoints.randomElement()
-            companion.setStatus("browsing…")
+            beginCompanionBrowse()
             companion.walk.update(sprite: companion, moving: false, facingDX: companion.facingDX, dt: dt)
             return
         }
 
         guard let target = companion.browseTarget else { return }
-        let dx = target.x - companion.position.x
-        let dy = target.y - companion.position.y
-        let dist = max(1, hypot(dx, dy))
-        companion.facingDX = dx
-        let previous = companion.position
-        companion.position.x += dx / dist * companion.browseSpeed * CGFloat(dt)
-        companion.position.y += dy / dist * companion.browseSpeed * CGFloat(dt)
-        clampToArena(companion)
-        resolveShelfCollision(companion, radius: 13, previous: previous)
+        companion.facingDX = target.x - companion.position.x
+        let beforeDist = hypot(target.x - companion.position.x, target.y - companion.position.y)
+        moveCompanionToward(target, dt: dt)
+
+        let afterDist = hypot(target.x - companion.position.x, target.y - companion.position.y)
+        if afterDist < companion.lastProgressDist - 1.5 {
+            companion.lastProgressDist = afterDist
+            companion.stuckTimer = 0
+        } else if afterDist >= beforeDist - 0.5 {
+            companion.stuckTimer += dt
+            if companion.stuckTimer > 1.4 {
+                // Give up on unreachable / blocked targets and pick a new aisle.
+                companion.browseTarget = nil
+                companion.stuckTimer = 0
+                companion.lastProgressDist = .greatestFiniteMagnitude
+            }
+        }
+
         companion.setStatus("shopping…")
         companion.walk.update(sprite: companion, moving: true, facingDX: companion.facingDX, dt: dt)
     }
 
+    private func beginCompanionBrowse() {
+        companion.browsePause = TimeInterval.random(in: 0.8...2.2)
+        companion.browseTarget = pickCompanionInterestPoint()
+        companion.stuckTimer = 0
+        companion.lastProgressDist = .greatestFiniteMagnitude
+        companion.setStatus("browsing…")
+        maybeCompanionChat()
+    }
+
+    private func pickCompanionInterestPoint() -> CGPoint? {
+        let options = interestPoints.filter { point in
+            !reached(companion.position, point) && isWalkable(point, radius: 14)
+        }
+        if let pick = options.randomElement() { return pick }
+        return interestPoints.filter { isWalkable($0, radius: 14) }.randomElement() ?? interestPoints.randomElement()
+    }
+
+    /// Direct move, then axis slides if a shelf blocks the path.
+    private func moveCompanionToward(_ target: CGPoint, dt: TimeInterval) {
+        let speed = companion.browseSpeed * CGFloat(dt)
+        let dx = target.x - companion.position.x
+        let dy = target.y - companion.position.y
+        let dist = max(1, hypot(dx, dy))
+        let previous = companion.position
+
+        companion.position.x += dx / dist * speed
+        companion.position.y += dy / dist * speed
+        clampToArena(companion)
+        resolveShelfCollision(companion, radius: 13, previous: previous)
+
+        let moved = hypot(companion.position.x - previous.x, companion.position.y - previous.y)
+        if moved >= speed * 0.35 { return }
+
+        // Slide along the freer axis to go around shelf corners.
+        let xDir: CGFloat = dx >= 0 ? 1 : -1
+        let yDir: CGFloat = dy >= 0 ? 1 : -1
+
+        companion.position = previous
+        companion.position.x += xDir * speed
+        clampToArena(companion)
+        resolveShelfCollision(companion, radius: 13, previous: previous)
+        let afterX = companion.position
+        let movedX = abs(afterX.x - previous.x)
+
+        companion.position = previous
+        companion.position.y += yDir * speed
+        clampToArena(companion)
+        resolveShelfCollision(companion, radius: 13, previous: previous)
+        let afterY = companion.position
+        let movedY = abs(afterY.y - previous.y)
+
+        if movedX >= movedY, movedX > 0.5 {
+            companion.position = afterX
+        } else if movedY > 0.5 {
+            companion.position = afterY
+        } else {
+            companion.position = previous
+        }
+    }
+
+    private func maybeCompanionChat() {
+        guard companion.chatCooldown <= 0 else { return }
+        guard Double.random(in: 0...1) < 0.72 else { return }
+        guard let line = CompanionNode.shoppingLines.randomElement() else { return }
+        companion.chatCooldown = TimeInterval.random(in: 3.5...6.5)
+        spawnCompanionChat(line, at: companion.position)
+        AudioManager.shared.playSFX(.companion, volume: 0.65)
+    }
+
     private func reached(_ a: CGPoint, _ b: CGPoint) -> Bool {
         hypot(a.x - b.x, a.y - b.y) < 18
+    }
+
+    private func isWalkable(_ point: CGPoint, radius: CGFloat) -> Bool {
+        for rect in shelfRects {
+            let nearestX = min(max(point.x, rect.minX), rect.maxX)
+            let nearestY = min(max(point.y, rect.minY), rect.maxY)
+            let dx = point.x - nearestX
+            let dy = point.y - nearestY
+            if dx * dx + dy * dy < radius * radius {
+                return false
+            }
+        }
+        return true
     }
 
     private func updateClerks(dt: TimeInterval, session: GameSession) {
@@ -366,6 +485,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func pushClerksWithPlayer() {
         let pushRadius: CGFloat = 30
+        var shoved = false
         for clerk in clerks {
             let dx = clerk.position.x - player.position.x
             let dy = clerk.position.y - player.position.y
@@ -373,6 +493,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             guard dist < pushRadius, dist > 0.1 else { continue }
             let strength: CGFloat = 260
             clerk.knockbackVelocity = CGVector(dx: dx / dist * strength, dy: dy / dist * strength)
+            shoved = true
+        }
+        if shoved, shoveSFXCooldown <= 0 {
+            AudioManager.shared.playSFX(.shove, volume: 0.7)
+            shoveSFXCooldown = 0.2
         }
     }
 
@@ -410,6 +535,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 pitchLine = clerk.clerkType.pitchLines.randomElement()
                 clerk.pitchCooldown = TimeInterval.random(in: 1.8...3.2)
                 spawnPitchLabel(pitchLine ?? "Sale!", at: clerk.position)
+                AudioManager.shared.playSFX(.pitch, volume: 0.55)
+                AudioManager.shared.playSFX(SFX.clerkVoice(clerk.clerkType), volume: 0.7)
             }
         }
 
@@ -619,6 +746,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             if dist < 22 {
                 gainXP(orb.amount, session: session)
                 session.showToast("+\(orb.amount) XP")
+                AudioManager.shared.playSFX(.xp)
                 orb.removeFromParent()
             } else if dist < magnetRange {
                 orb.position.x += dx / dist * 220 * CGFloat(dt)
@@ -643,6 +771,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let dist = max(1, hypot(dx, dy))
         let kb = CGVector(dx: dx / dist * knockbackStrength, dy: dy / dist * knockbackStrength)
         clerk.applyDamage(damage, knockback: kb)
+        AudioManager.shared.playSFX(.hit, volume: 0.55)
         if clerk.hp <= 0 {
             defeatClerk(clerk, session: session)
         }
@@ -651,6 +780,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func defeatClerk(_ clerk: ClerkNode, session: GameSession) {
         guard let idx = clerks.firstIndex(where: { $0 === clerk }) else { return }
         clerks.remove(at: idx)
+        AudioManager.shared.playSFX(.defeat)
 
         let orb = XPOrbNode(amount: clerk.clerkType.xpReward)
         orb.position = clerk.position
@@ -738,6 +868,28 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             SKAction.group([
                 SKAction.moveBy(x: 0, y: 30, duration: 0.8),
                 SKAction.fadeOut(withDuration: 0.8)
+            ]),
+            SKAction.removeFromParent()
+        ]))
+    }
+
+    private func spawnCompanionChat(_ text: String, at position: CGPoint) {
+        let label = SKLabelNode(fontNamed: "Menlo-Bold")
+        label.text = text
+        label.fontSize = 12
+        label.fontColor = SKColor(red: 1.0, green: 0.72, blue: 0.55, alpha: 1)
+        label.position = CGPoint(x: position.x, y: position.y + 28)
+        label.zPosition = 41
+        entityNode.addChild(label)
+        label.setScale(0.85)
+        label.run(SKAction.sequence([
+            SKAction.group([
+                SKAction.scale(to: 1.05, duration: 0.12),
+                SKAction.moveBy(x: 0, y: 36, duration: 1.15)
+            ]),
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: 10, duration: 0.35),
+                SKAction.fadeOut(withDuration: 0.35)
             ]),
             SKAction.removeFromParent()
         ]))

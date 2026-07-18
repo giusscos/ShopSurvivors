@@ -31,6 +31,12 @@ final class WalkAnimator {
             sprite.xScale = 1
         }
 
+        // Keep name tags readable when the parent sprite faces left.
+        let labelScale: CGFloat = sprite.xScale < 0 ? -1 : 1
+        for case let label as SKLabelNode in sprite.children {
+            label.xScale = labelScale
+        }
+
         guard moving else {
             frameIndex = 0
             timer = 0

@@ -49,6 +49,7 @@ struct ResultView: View {
 
                 HStack(spacing: 12) {
                     Button {
+                        AudioManager.shared.playSFX(.ui)
                         session.startStore(store)
                     } label: {
                         resultButton("Retry", filled: false)
@@ -56,6 +57,7 @@ struct ResultView: View {
 
                     if let next = nextStore {
                         Button {
+                            AudioManager.shared.playSFX(.ui)
                             session.startStore(next)
                         } label: {
                             resultButton("Next Store", filled: true)
@@ -63,6 +65,7 @@ struct ResultView: View {
                     }
 
                     Button {
+                        AudioManager.shared.playSFX(.ui)
                         session.goLevelSelect()
                     } label: {
                         resultButton("Stores", filled: session.outcome != .won || nextStore == nil)

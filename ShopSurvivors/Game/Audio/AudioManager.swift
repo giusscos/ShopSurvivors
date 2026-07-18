@@ -1,11 +1,41 @@
 import AVFoundation
 import Foundation
 
+enum SFX: String, CaseIterable {
+    case hit = "sfx_hit"
+    case defeat = "sfx_defeat"
+    case shove = "sfx_shove"
+    case xp = "sfx_xp"
+    case coupon = "sfx_coupon"
+    case pitch = "sfx_pitch"
+    case levelup = "sfx_levelup"
+    case win = "sfx_win"
+    case lose = "sfx_lose"
+    case ui = "sfx_ui"
+    case door = "sfx_door"
+    case clerkPitcher = "sfx_clerk_pitcher"
+    case clerkCloser = "sfx_clerk_closer"
+    case clerkSprinter = "sfx_clerk_sprinter"
+    case clerkUpseller = "sfx_clerk_upseller"
+    case companion = "sfx_companion"
+
+    static func clerkVoice(_ type: ClerkType) -> SFX {
+        switch type {
+        case .pitcher: .clerkPitcher
+        case .closer: .clerkCloser
+        case .sprinter: .clerkSprinter
+        case .upseller: .clerkUpseller
+        }
+    }
+}
+
 @MainActor
 final class AudioManager {
     static let shared = AudioManager()
 
     private var musicPlayer: AVAudioPlayer?
+    private var sfxPlayers: [String: [AVAudioPlayer]] = [:]
+    private let sfxPoolSize = 3
     private var isSetup = false
 
     var musicEnabled: Bool {
@@ -19,8 +49,15 @@ final class AudioManager {
         }
     }
 
+    var sfxEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(sfxEnabled, forKey: "sfxEnabled")
+        }
+    }
+
     private init() {
         musicEnabled = UserDefaults.standard.object(forKey: "musicEnabled") as? Bool ?? true
+        sfxEnabled = UserDefaults.standard.object(forKey: "sfxEnabled") as? Bool ?? true
     }
 
     func setup() {
@@ -31,6 +68,7 @@ final class AudioManager {
         isSetup = true
         activateSession()
         loadMusic()
+        preloadSFX()
     }
 
     private func activateSession() {
@@ -59,6 +97,28 @@ final class AudioManager {
         }
     }
 
+    private func preloadSFX() {
+        for sfx in SFX.allCases {
+            guard let url = Bundle.main.url(forResource: sfx.rawValue, withExtension: "wav") else {
+                print("Missing \(sfx.rawValue).wav in bundle")
+                continue
+            }
+            var pool: [AVAudioPlayer] = []
+            for _ in 0..<sfxPoolSize {
+                do {
+                    let player = try AVAudioPlayer(contentsOf: url)
+                    player.prepareToPlay()
+                    pool.append(player)
+                } catch {
+                    print("SFX load error \(sfx.rawValue): \(error)")
+                }
+            }
+            if !pool.isEmpty {
+                sfxPlayers[sfx.rawValue] = pool
+            }
+        }
+    }
+
     func playMusic(forceRestart: Bool = false) {
         setup()
         guard musicEnabled else { return }
@@ -79,5 +139,18 @@ final class AudioManager {
 
     func stopMusic() {
         musicPlayer?.stop()
+    }
+
+    func playSFX(_ sfx: SFX, volume: Float = 1) {
+        setup()
+        guard sfxEnabled else { return }
+        if sfxPlayers[sfx.rawValue] == nil {
+            preloadSFX()
+        }
+        guard let pool = sfxPlayers[sfx.rawValue], !pool.isEmpty else { return }
+        let player = pool.first(where: { !$0.isPlaying }) ?? pool[0]
+        player.volume = volume
+        player.currentTime = 0
+        player.play()
     }
 }

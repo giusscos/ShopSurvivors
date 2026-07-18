@@ -4,6 +4,8 @@ import CoreGraphics
 
 enum AppScreen: Equatable {
     case title
+    case howToPlay
+    case settings
     case levelSelect
     case playing(storeId: String)
 }
@@ -28,6 +30,7 @@ final class GameSession: ObservableObject {
     @Published var couponMaxCooldown: TimeInterval = 4.5
     @Published var isPausedForUpgrade: Bool = false
     @Published var isPaused: Bool = false
+    @Published var isTutorialActive: Bool = false
     @Published var isAimingCoupon: Bool = false
     @Published var upgradeOffers: [UpgradeOffer] = []
     @Published var outcome: RunOutcome?
@@ -48,14 +51,20 @@ final class GameSession: ObservableObject {
     var couponDeployRequested: Bool = false
 
     private let unlockedKey = "unlockedStoreIndex"
+    private let tutorialKey = "hasCompletedTutorial"
     private var toastClearTask: Task<Void, Never>?
 
     init() {
         unlockedStoreIndex = UserDefaults.standard.integer(forKey: unlockedKey)
     }
 
+    var hasCompletedTutorial: Bool {
+        get { UserDefaults.standard.bool(forKey: tutorialKey) }
+        set { UserDefaults.standard.set(newValue, forKey: tutorialKey) }
+    }
+
     var isGameplayFrozen: Bool {
-        isPaused || isPausedForUpgrade || outcome != nil
+        isPaused || isPausedForUpgrade || isTutorialActive || outcome != nil
     }
 
     func goTitle() {
@@ -63,8 +72,27 @@ final class GameSession: ObservableObject {
         outcome = nil
         isPausedForUpgrade = false
         isPaused = false
+        isTutorialActive = false
         isAimingCoupon = false
         AudioManager.shared.playMusic()
+    }
+
+    func goHowToPlay() {
+        screen = .howToPlay
+        outcome = nil
+        isPausedForUpgrade = false
+        isPaused = false
+        isTutorialActive = false
+        isAimingCoupon = false
+    }
+
+    func goSettings() {
+        screen = .settings
+        outcome = nil
+        isPausedForUpgrade = false
+        isPaused = false
+        isTutorialActive = false
+        isAimingCoupon = false
     }
 
     func goLevelSelect() {
@@ -72,7 +100,9 @@ final class GameSession: ObservableObject {
         outcome = nil
         isPausedForUpgrade = false
         isPaused = false
+        isTutorialActive = false
         isAimingCoupon = false
+        moveVector = .zero
     }
 
     func startStore(_ store: StoreLevel) {
@@ -98,12 +128,31 @@ final class GameSession: ObservableObject {
         couponAimWorld = nil
         couponDeployRequested = false
         runID = UUID()
+        isTutorialActive = !hasCompletedTutorial
         screen = .playing(storeId: store.id)
         AudioManager.shared.playMusic()
     }
 
+    func completeTutorial() {
+        hasCompletedTutorial = true
+        isTutorialActive = false
+    }
+
+    func skipTutorial() {
+        completeTutorial()
+    }
+
+    func requestTutorialReplay() {
+        hasCompletedTutorial = false
+    }
+
+    func resetUnlocks() {
+        unlockedStoreIndex = 0
+        UserDefaults.standard.set(0, forKey: unlockedKey)
+    }
+
     func togglePause() {
-        guard outcome == nil, !isPausedForUpgrade else { return }
+        guard outcome == nil, !isPausedForUpgrade, !isTutorialActive else { return }
         isPaused.toggle()
         if isPaused {
             isAimingCoupon = false
@@ -130,7 +179,7 @@ final class GameSession: ObservableObject {
     }
 
     func beginCouponAim() {
-        guard couponCooldown <= 0, outcome == nil, !isPausedForUpgrade, !isPaused else { return }
+        guard couponCooldown <= 0, outcome == nil, !isPausedForUpgrade, !isPaused, !isTutorialActive else { return }
         guard !isAimingCoupon else { return }
         isAimingCoupon = true
         couponDeployRequested = false
@@ -154,6 +203,7 @@ final class GameSession: ObservableObject {
         isAimingCoupon = false
         upgradeOffers = offers
         isPausedForUpgrade = true
+        AudioManager.shared.playSFX(.levelup)
     }
 
     func applyUpgrade(_ offer: UpgradeOffer) {
@@ -183,13 +233,16 @@ final class GameSession: ObservableObject {
         }
         isPausedForUpgrade = false
         upgradeOffers = []
+        AudioManager.shared.playSFX(.ui)
     }
 
     func endRun(won: Bool, storeId: String) {
         guard outcome == nil else { return }
         isAimingCoupon = false
         isPaused = false
+        isTutorialActive = false
         outcome = won ? .won : .lost
+        AudioManager.shared.playSFX(won ? .win : .lose)
         if won { unlockNextIfNeeded(clearedStoreId: storeId) }
     }
 

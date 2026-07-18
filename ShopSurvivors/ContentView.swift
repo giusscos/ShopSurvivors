@@ -8,14 +8,18 @@ struct ContentView: View {
             switch session.screen {
             case .title:
                 TitleView(session: session)
+            case .howToPlay:
+                HowToPlayView(session: session)
+            case .settings:
+                SettingsView(session: session)
             case .levelSelect:
-                LevelSelectView(session: session)
+                MallHubView(session: session)
             case .playing(let storeId):
                 if let store = StoreLevel.byId(storeId) {
                     GameContainerView(session: session, store: store)
                         .id(session.runID)
                 } else {
-                    LevelSelectView(session: session)
+                    MallHubView(session: session)
                 }
             }
         }

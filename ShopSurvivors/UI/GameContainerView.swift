@@ -60,6 +60,10 @@ struct GameContainerView: View {
                     UpgradePickerView(session: session)
                 }
 
+                if session.isTutorialActive {
+                    TutorialOverlayView(session: session)
+                }
+
                 if session.isPaused {
                     PauseOverlayView(session: session)
                 }
@@ -132,7 +136,7 @@ struct GameContainerView: View {
                 .background(Color.black.opacity(0.4))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .disabled(session.outcome != nil || session.isPausedForUpgrade || session.isAimingCoupon)
+        .disabled(session.outcome != nil || session.isPausedForUpgrade || session.isAimingCoupon || session.isTutorialActive)
     }
 
     private var budgetBar: some View {
@@ -197,8 +201,8 @@ struct GameContainerView: View {
         HStack(alignment: .bottom) {
             VirtualJoystick(vector: $joystickVector)
                 .padding(.leading, 8)
-                .opacity(session.isPaused ? 0.3 : 1)
-                .disabled(session.isPaused || session.isPausedForUpgrade)
+                .opacity(session.isPaused || session.isTutorialActive ? 0.3 : 1)
+                .disabled(session.isPaused || session.isPausedForUpgrade || session.isTutorialActive)
 
             Spacer()
 
@@ -265,7 +269,8 @@ struct GameContainerView: View {
                     guard ready,
                           session.outcome == nil,
                           !session.isPausedForUpgrade,
-                          !session.isPaused else { return }
+                          !session.isPaused,
+                          !session.isTutorialActive else { return }
                     session.beginCouponAim()
                     session.couponAimWorld = screenToWorld(value.location, in: geo.size)
                 }
@@ -275,7 +280,7 @@ struct GameContainerView: View {
                     session.requestCouponDeploy()
                 }
         )
-        .allowsHitTesting(ready && session.outcome == nil && !session.isPausedForUpgrade && !session.isPaused)
+        .allowsHitTesting(ready && session.outcome == nil && !session.isPausedForUpgrade && !session.isPaused && !session.isTutorialActive)
     }
 
     private func formatTime(_ t: TimeInterval) -> String {
