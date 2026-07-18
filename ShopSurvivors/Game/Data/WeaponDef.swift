@@ -1,0 +1,78 @@
+import Foundation
+import CoreGraphics
+
+enum WeaponKind: String, CaseIterable, Identifiable, Codable {
+    case priceTags
+    case receipts
+    case barcodeLaser
+    case shoppingBag
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .priceTags: "Price Tags"
+        case .receipts: "Receipts"
+        case .barcodeLaser: "Barcode Laser"
+        case .shoppingBag: "Shopping Bag"
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .priceTags: "TAG"
+        case .receipts: "RCP"
+        case .barcodeLaser: "LASER"
+        case .shoppingBag: "BAG"
+        }
+    }
+
+    var blurb: String {
+        switch self {
+        case .priceTags: "Orbiting tags that slice clerks"
+        case .receipts: "Fire paper projectiles at nearest clerks"
+        case .barcodeLaser: "Sweeping laser beam"
+        case .shoppingBag: "Pulse knockback around you"
+        }
+    }
+
+    var spriteName: String {
+        switch self {
+        case .priceTags: "proj_pricetag"
+        case .receipts: "proj_receipt"
+        case .barcodeLaser: "proj_laser"
+        case .shoppingBag: "proj_bag"
+        }
+    }
+
+    func damage(level: Int) -> CGFloat {
+        let base: CGFloat = switch self {
+        case .priceTags: 8
+        case .receipts: 12
+        case .barcodeLaser: 6
+        case .shoppingBag: 10
+        }
+        return base * (1 + 0.25 * CGFloat(level - 1))
+    }
+
+    func cooldown(level: Int) -> TimeInterval {
+        let base: TimeInterval = switch self {
+        case .priceTags: 0.35
+        case .receipts: 0.55
+        case .barcodeLaser: 1.4
+        case .shoppingBag: 2.2
+        }
+        return max(0.12, base * pow(0.92, Double(level - 1)))
+    }
+
+    func orbitCount(level: Int) -> Int {
+        min(1 + level, 6)
+    }
+}
+
+struct OwnedWeapon: Identifiable, Equatable {
+    var kind: WeaponKind
+    var level: Int
+
+    var id: String { kind.rawValue }
+}

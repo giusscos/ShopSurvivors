@@ -1,21 +1,26 @@
-//
-//  ContentView.swift
-//  ShopSurvivors
-//
-//  Created by Giuseppe Cosenza on 18/07/2026.
-//
-
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var session = GameSession()
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        Group {
+            switch session.screen {
+            case .title:
+                TitleView(session: session)
+            case .levelSelect:
+                LevelSelectView(session: session)
+            case .playing(let storeId):
+                if let store = StoreLevel.byId(storeId) {
+                    GameContainerView(session: session, store: store)
+                        .id(session.runID)
+                } else {
+                    LevelSelectView(session: session)
+                }
+            }
         }
-        .padding()
+        .preferredColorScheme(.dark)
+        .statusBarHidden(true)
     }
 }
 
