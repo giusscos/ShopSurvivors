@@ -3,6 +3,7 @@ import Combine
 import CoreGraphics
 
 enum AppScreen: Equatable {
+    case intro
     case title
     case howToPlay
     case settings
@@ -17,7 +18,7 @@ enum RunOutcome: Equatable {
 
 @MainActor
 final class GameSession: ObservableObject {
-    @Published var screen: AppScreen = .title
+    @Published var screen: AppScreen
     @Published var unlockedStoreIndex: Int = 0
 
     @Published var budget: CGFloat = 100
@@ -52,15 +53,23 @@ final class GameSession: ObservableObject {
 
     private let unlockedKey = "unlockedStoreIndex"
     private let tutorialKey = "hasCompletedTutorial"
+    private let introKey = "hasSeenLoreIntro"
     private var toastClearTask: Task<Void, Never>?
 
     init() {
         unlockedStoreIndex = UserDefaults.standard.integer(forKey: unlockedKey)
+        let seenIntro = UserDefaults.standard.bool(forKey: introKey)
+        screen = seenIntro ? .title : .intro
     }
 
     var hasCompletedTutorial: Bool {
         get { UserDefaults.standard.bool(forKey: tutorialKey) }
         set { UserDefaults.standard.set(newValue, forKey: tutorialKey) }
+    }
+
+    var hasSeenLoreIntro: Bool {
+        get { UserDefaults.standard.bool(forKey: introKey) }
+        set { UserDefaults.standard.set(newValue, forKey: introKey) }
     }
 
     var isGameplayFrozen: Bool {
@@ -75,6 +84,21 @@ final class GameSession: ObservableObject {
         isTutorialActive = false
         isAimingCoupon = false
         AudioManager.shared.playMusic()
+    }
+
+    func completeLoreIntro() {
+        hasSeenLoreIntro = true
+        goTitle()
+    }
+
+    func requestLoreIntroReplay() {
+        hasSeenLoreIntro = false
+        screen = .intro
+        outcome = nil
+        isPausedForUpgrade = false
+        isPaused = false
+        isTutorialActive = false
+        isAimingCoupon = false
     }
 
     func goHowToPlay() {

@@ -6,6 +6,8 @@ struct ContentView: View {
     var body: some View {
         Group {
             switch session.screen {
+            case .intro:
+                LoreIntroView(session: session)
             case .title:
                 TitleView(session: session)
             case .howToPlay:

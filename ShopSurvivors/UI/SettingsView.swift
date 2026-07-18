@@ -12,7 +12,7 @@ struct SettingsView: View {
             Color(red: 0.07, green: 0.12, blue: 0.16)
                 .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Button {
                         AudioManager.shared.playSFX(.ui)
@@ -30,72 +30,85 @@ struct SettingsView: View {
                     Color.clear.frame(width: 60)
                 }
 
-                VStack(spacing: 14) {
-                    Toggle("Music", isOn: $musicOn)
-                        .onChange(of: musicOn) { _, on in
-                            AudioManager.shared.musicEnabled = on
-                            AudioManager.shared.playSFX(.ui)
-                            if on {
-                                AudioManager.shared.playMusic(forceRestart: true)
-                            }
-                        }
-
-                    Toggle("Sound Effects", isOn: $sfxOn)
-                        .onChange(of: sfxOn) { _, on in
-                            AudioManager.shared.sfxEnabled = on
-                            if on {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        Toggle("Music", isOn: $musicOn)
+                            .onChange(of: musicOn) { _, on in
+                                AudioManager.shared.musicEnabled = on
                                 AudioManager.shared.playSFX(.ui)
+                                if on {
+                                    AudioManager.shared.playMusic(forceRestart: true)
+                                }
                             }
+
+                        Toggle("Sound Effects", isOn: $sfxOn)
+                            .onChange(of: sfxOn) { _, on in
+                                AudioManager.shared.sfxEnabled = on
+                                if on {
+                                    AudioManager.shared.playSFX(.ui)
+                                }
+                            }
+
+                        Divider().overlay(Color.white.opacity(0.15))
+
+                        Button {
+                            AudioManager.shared.playSFX(.ui)
+                            session.requestTutorialReplay()
+                            didQueueTutorial = true
+                        } label: {
+                            settingsRow(
+                                title: "Replay tutorial next run",
+                                subtitle: didQueueTutorial
+                                    ? "Queued — opens on your next store entry"
+                                    : "Shows the first-run coaching overlay again"
+                            )
                         }
 
-                    Divider().overlay(Color.white.opacity(0.15))
+                        Button {
+                            AudioManager.shared.playSFX(.ui)
+                            session.requestLoreIntroReplay()
+                        } label: {
+                            settingsRow(
+                                title: "Replay opening story",
+                                subtitle: "Watch the manga intro again"
+                            )
+                        }
 
-                    Button {
-                        AudioManager.shared.playSFX(.ui)
-                        session.requestTutorialReplay()
-                        didQueueTutorial = true
-                    } label: {
-                        settingsRow(
-                            title: "Replay tutorial next run",
-                            subtitle: didQueueTutorial
-                                ? "Queued — opens on your next store entry"
-                                : "Shows the first-run coaching overlay again"
-                        )
-                    }
+                        Button {
+                            AudioManager.shared.playSFX(.ui)
+                            session.goHowToPlay()
+                        } label: {
+                            settingsRow(
+                                title: "How to Play",
+                                subtitle: "Controls, LURE, XP, and how to win"
+                            )
+                        }
 
-                    Button {
-                        AudioManager.shared.playSFX(.ui)
-                        session.goHowToPlay()
-                    } label: {
-                        settingsRow(
-                            title: "How to Play",
-                            subtitle: "Controls, LURE, XP, and how to win"
-                        )
+                        Button {
+                            AudioManager.shared.playSFX(.ui)
+                            session.resetUnlocks()
+                            didReset = true
+                        } label: {
+                            settingsRow(
+                                title: "Reset store unlocks",
+                                subtitle: didReset
+                                    ? "Progress cleared — only the first store is open"
+                                    : "Locks Fashion and Grocery again"
+                            )
+                        }
                     }
-
-                    Button {
-                        AudioManager.shared.playSFX(.ui)
-                        session.resetUnlocks()
-                        didReset = true
-                    } label: {
-                        settingsRow(
-                            title: "Reset store unlocks",
-                            subtitle: didReset
-                                ? "Progress cleared — only the first store is open"
-                                : "Locks Fashion and Grocery again"
-                        )
-                    }
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .tint(Color(red: 1.0, green: 0.55, blue: 0.25))
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.07))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white)
-                .tint(Color(red: 1.0, green: 0.55, blue: 0.25))
-                .padding(18)
-                .background(Color.white.opacity(0.07))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                Spacer()
             }
-            .padding(28)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .onAppear {
             musicOn = AudioManager.shared.musicEnabled

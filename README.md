@@ -20,16 +20,17 @@ Clerks path toward your **friend** (companion). When they get close, they pitch 
 
 ## How to play
 
-1. **Title** → How to Play / Settings, or **Enter the Mall**
-2. In the **mall corridor**, walk (or tap) into a store door with your friend
-3. Move with the **left joystick**
-4. Your **FRIEND** browses the store on their own — protect them
-5. **Walk into clerks** to shove them away
-6. **Hold LURE** and drag onto the floor, release to drop a coupon that draws clerks away
-7. Defeat clerks → pick up **+XP** gems → level up → pick an upgrade
-8. Survive until the timer ends with money left
+1. **First launch** shows a short **manga lore intro** (skip anytime; replay from Settings)
+2. **Title** → How to Play / Settings, or **Enter the Mall**
+3. In the **mall corridor**, walk (or tap) into a store door with your friend
+4. Move with the **left joystick**
+5. Your **FRIEND** browses the store on their own — protect them
+6. **Walk into clerks** to shove them away
+7. **Hold LURE** and drag onto the floor, release to drop a coupon that draws clerks away
+8. Defeat clerks → pick up **+XP** gems → level up → pick an upgrade
+9. Survive until the timer ends with money left
 
-First run shows a short **tutorial overlay** (skippable). Replay it anytime from **Settings**.
+First store run shows a short **tutorial overlay** (skippable). Replay it anytime from **Settings**.
 
 ### Controls
 
@@ -97,7 +98,7 @@ Unlocked / upgraded via XP level-up cards.
 
 ## Tech stack
 
-- **SwiftUI** — menus, HUD, pause, upgrades, results, settings, tutorial
+- **SwiftUI** — menus, HUD, pause, upgrades, results, settings, tutorial, lore intro
 - **SpriteKit** — mall hub, arena, entities, combat, spawning
 - **AVFoundation** — looping soundtrack + short SFX (`mall_survivors_theme.wav`, `sfx_*.wav`)
 - **Landscape only** (iPhone & iPad)
@@ -109,7 +110,7 @@ Unlocked / upgraded via XP level-up cards.
 ShopSurvivors/
   ContentView.swift              # Screen router
   ShopSurvivorsApp.swift
-  UI/                            # Title, hub, HUD, pause, settings, tutorial, results
+  UI/                            # Title, hub, HUD, pause, settings, tutorial, lore intro, results
   Game/
     GameScene.swift              # Core loop
     StoreHubScene.swift          # Walkable mall corridor
@@ -150,6 +151,7 @@ python3 scripts/generate_sfx.py
 - HUD labels: `YOU`, `FRIEND`, `+XP`, `LURE`, weapon short names (labels stay readable when facing left)
 - Pause menu includes a short legend plus music/SFX toggles
 - Title has **How to Play** and **Settings**; first store entry can show coaching steps
+- First launch plays a **4-panel manga lore intro** (vignette + light motion); skipped after that, replayable in Settings
 
 ---
 
