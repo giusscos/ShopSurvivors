@@ -11,12 +11,6 @@ final class CouponNode: SKSpriteNode {
         name = "coupon"
         zPosition = 12
 
-        physicsBody = SKPhysicsBody(circleOfRadius: 10)
-        physicsBody?.affectedByGravity = false
-        physicsBody?.categoryBitMask = PhysicsCategory.coupon
-        physicsBody?.collisionBitMask = PhysicsCategory.none
-        physicsBody?.contactTestBitMask = PhysicsCategory.none
-
         let ring = SKShapeNode(circleOfRadius: lureRadius)
         ring.strokeColor = SKColor(red: 1, green: 0.75, blue: 0.2, alpha: 0.45)
         ring.lineWidth = 2

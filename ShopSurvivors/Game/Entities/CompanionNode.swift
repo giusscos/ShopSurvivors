@@ -35,14 +35,6 @@ final class CompanionNode: SKSpriteNode {
         name = "companion"
         zPosition = 18
 
-        physicsBody = SKPhysicsBody(circleOfRadius: 13)
-        physicsBody?.affectedByGravity = false
-        physicsBody?.allowsRotation = false
-        physicsBody?.linearDamping = 10
-        physicsBody?.categoryBitMask = PhysicsCategory.companion
-        physicsBody?.collisionBitMask = PhysicsCategory.wall
-        physicsBody?.contactTestBitMask = PhysicsCategory.none
-
         let tag = SKLabelNode(fontNamed: "Menlo-Bold")
         tag.text = "FRIEND"
         tag.fontSize = 9

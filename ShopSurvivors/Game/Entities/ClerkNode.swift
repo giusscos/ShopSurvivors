@@ -8,7 +8,10 @@ final class ClerkNode: SKSpriteNode {
     var lureTimeRemaining: TimeInterval = 0
     var knockbackVelocity: CGVector = .zero
     var facingDX: CGFloat = 1
+    /// Set each frame by soft-separation when another clerk is within pack range.
+    var hasPackNeighbor = false
     let walk: WalkAnimator
+    private let nameTag: SKLabelNode
 
     init(type: ClerkType) {
         self.clerkType = type
@@ -16,17 +19,6 @@ final class ClerkNode: SKSpriteNode {
         self.walk = WalkAnimator(baseName: type.spriteName)
         let tex = SKTexture(imageNamed: "\(type.spriteName)_idle")
         tex.filteringMode = .nearest
-        super.init(texture: tex, color: .clear, size: CGSize(width: 32, height: 32))
-        name = "clerk"
-        zPosition = 15
-
-        physicsBody = SKPhysicsBody(circleOfRadius: 12)
-        physicsBody?.affectedByGravity = false
-        physicsBody?.allowsRotation = false
-        physicsBody?.linearDamping = 6
-        physicsBody?.categoryBitMask = PhysicsCategory.clerk
-        physicsBody?.collisionBitMask = PhysicsCategory.wall | PhysicsCategory.clerk
-        physicsBody?.contactTestBitMask = PhysicsCategory.projectile
 
         let tag = SKLabelNode(fontNamed: "Menlo-Bold")
         tag.text = type.displayName.uppercased()
@@ -35,6 +27,12 @@ final class ClerkNode: SKSpriteNode {
         tag.verticalAlignmentMode = .bottom
         tag.position = CGPoint(x: 0, y: 16)
         tag.zPosition = 2
+        self.nameTag = tag
+
+        super.init(texture: tex, color: .clear, size: CGSize(width: 32, height: 32))
+        name = "clerk"
+        zPosition = 15
+        // No physics body — movement and separation are manual (avoids clerk pile-up solver cost).
         addChild(tag)
     }
 
@@ -43,12 +41,21 @@ final class ClerkNode: SKSpriteNode {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func applyDamage(_ amount: CGFloat, knockback: CGVector) {
+    func applyDamage(_ amount: CGFloat, knockback: CGVector, flash: Bool) {
         hp -= amount
         knockbackVelocity = knockback
-        run(SKAction.sequence([
-            SKAction.colorize(with: .white, colorBlendFactor: 0.8, duration: 0.05),
-            SKAction.colorize(withColorBlendFactor: 0, duration: 0.1)
-        ]))
+        guard flash else { return }
+        // Instant tint; GameScene decays colorBlendFactor (no SKAction churn).
+        color = .white
+        colorBlendFactor = 0.75
+    }
+
+    func setNameTagHidden(_ hidden: Bool) {
+        nameTag.isHidden = hidden
+    }
+
+    func syncNameTagFacing() {
+        guard !nameTag.isHidden else { return }
+        nameTag.xScale = xScale < 0 ? -1 : 1
     }
 }

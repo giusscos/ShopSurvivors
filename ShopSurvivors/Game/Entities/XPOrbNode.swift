@@ -11,12 +11,6 @@ final class XPOrbNode: SKSpriteNode {
         name = "xpOrb"
         zPosition = 10
 
-        physicsBody = SKPhysicsBody(circleOfRadius: 10)
-        physicsBody?.affectedByGravity = false
-        physicsBody?.categoryBitMask = PhysicsCategory.xpOrb
-        physicsBody?.collisionBitMask = PhysicsCategory.none
-        physicsBody?.contactTestBitMask = PhysicsCategory.player
-
         let tag = SKLabelNode(fontNamed: "Menlo-Bold")
         tag.text = "+\(amount) XP"
         tag.fontSize = 9
@@ -26,10 +20,10 @@ final class XPOrbNode: SKSpriteNode {
         tag.zPosition = 2
         addChild(tag)
 
-        run(SKAction.repeatForever(SKAction.sequence([
-            SKAction.scale(to: 1.12, duration: 0.35),
-            SKAction.scale(to: 1.0, duration: 0.35)
-        ])))
+        run(SKAction.sequence([
+            SKAction.scale(to: 1.2, duration: 0.07),
+            SKAction.scale(to: 1.0, duration: 0.07)
+        ]))
     }
 
     @available(*, unavailable)

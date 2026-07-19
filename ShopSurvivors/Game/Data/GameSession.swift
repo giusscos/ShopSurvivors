@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CoreGraphics
+import QuartzCore
 
 enum AppScreen: Equatable {
     case intro
@@ -22,14 +23,18 @@ final class GameSession: ObservableObject {
     @Published var unlockedStoreIndex: Int = 0
     @Published var mallCleared: Bool = false
 
-    @Published var budget: CGFloat = 100
-    @Published var startingBudget: CGFloat = 100
-    @Published var timeRemaining: TimeInterval = 120
-    @Published var runElapsed: TimeInterval = 0
+    /// High-frequency run stats — not @Published; UI refreshes via `hudRevision`.
+    var budget: CGFloat = 100
+    var startingBudget: CGFloat = 100
+    var timeRemaining: TimeInterval = 120
+    var runElapsed: TimeInterval = 0
+    var couponCooldown: TimeInterval = 0
+    /// Bumped ~12×/sec (or on force) so SwiftUI HUD can refresh without per-frame thrash.
+    @Published private(set) var hudRevision: UInt = 0
+
     @Published var xp: Int = 0
     @Published var xpToNext: Int = 12
     @Published var playerLevel: Int = 1
-    @Published var couponCooldown: TimeInterval = 0
     @Published var couponMaxCooldown: TimeInterval = 4.5
     @Published var isPausedForUpgrade: Bool = false
     @Published var isPaused: Bool = false
@@ -41,10 +46,57 @@ final class GameSession: ObservableObject {
     @Published var moveSpeedMultiplier: CGFloat = 1
     @Published var willpowerMultiplier: CGFloat = 1
     @Published var pitchBanner: String = ""
-    @Published var lastDrainFlash: Bool = false
     @Published var runID: UUID = UUID()
     @Published var pickupToast: String = ""
     @Published var luresDeployed: Int = 0
+    /// When true, gameplay HUD shows a live FPS counter.
+    @Published var showFPS: Bool = false {
+        didSet { UserDefaults.standard.set(showFPS, forKey: showFPSKey) }
+    }
+    @Published var hapticsEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(hapticsEnabled, forKey: hapticsKey)
+            Haptics.isEnabled = hapticsEnabled
+        }
+    }
+    @Published var reducedFX: Bool = false {
+        didSet { UserDefaults.standard.set(reducedFX, forKey: reducedFXKey) }
+    }
+    @Published var joystickOnRight: Bool = false {
+        didSet { UserDefaults.standard.set(joystickOnRight, forKey: joystickOnRightKey) }
+    }
+    /// 0 = small, 1 = medium, 2 = large
+    @Published var joystickSizePreset: Int = 1 {
+        didSet {
+            let clamped = min(2, max(0, joystickSizePreset))
+            if joystickSizePreset != clamped {
+                joystickSizePreset = clamped
+                return
+            }
+            UserDefaults.standard.set(clamped, forKey: joystickSizeKey)
+        }
+    }
+    @Published var joystickOpacity: Double = 1.0 {
+        didSet {
+            let clamped = min(1.0, max(0.35, joystickOpacity))
+            if abs(joystickOpacity - clamped) > 0.001 {
+                joystickOpacity = clamped
+                return
+            }
+            UserDefaults.standard.set(clamped, forKey: joystickOpacityKey)
+        }
+    }
+    /// Latest measured FPS (written by GameScene; HUD reads via `hudRevision`).
+    var displayedFPS: Int = 0
+
+    var joystickSize: CGFloat {
+        switch joystickSizePreset {
+        case 0: return 90
+        case 2: return 135
+        default: return 110
+        }
+    }
+
     /// Bumps when local bests change so hub UI refreshes.
     @Published var bestScoresRevision: Int = 0
     /// Non-nil while the difficulty picker overlay should be shown for a store.
@@ -66,14 +118,32 @@ final class GameSession: ObservableObject {
     private let mallClearedKey = "mallCleared"
     private let tutorialKey = "hasCompletedTutorial"
     private let introKey = "hasSeenLoreIntro"
+    private let showFPSKey = "showFPS"
+    private let hapticsKey = "hapticsEnabled"
+    private let reducedFXKey = "reducedFX"
+    private let joystickOnRightKey = "joystickOnRight"
+    private let joystickSizeKey = "joystickSizePreset"
+    private let joystickOpacityKey = "joystickOpacity"
     private let bestBudgetPrefix = "bestBudget_"
     private let bestEndlessKey = "bestEndlessSeconds"
     private var toastClearTask: Task<Void, Never>?
     private var cloudObserver: NSObjectProtocol?
+    private var lastHUDPublishTime: CFTimeInterval = 0
+    private let hudPublishInterval: CFTimeInterval = 1.0 / 12.0
 
     init() {
         unlockedStoreIndex = UserDefaults.standard.integer(forKey: unlockedKey)
         mallCleared = UserDefaults.standard.bool(forKey: mallClearedKey)
+        showFPS = UserDefaults.standard.bool(forKey: showFPSKey)
+        let haptics = UserDefaults.standard.object(forKey: hapticsKey) as? Bool ?? true
+        hapticsEnabled = haptics
+        Haptics.isEnabled = haptics
+        reducedFX = UserDefaults.standard.bool(forKey: reducedFXKey)
+        joystickOnRight = UserDefaults.standard.bool(forKey: joystickOnRightKey)
+        let storedSize = UserDefaults.standard.object(forKey: joystickSizeKey) as? Int ?? 1
+        joystickSizePreset = min(2, max(0, storedSize))
+        let storedOpacity = UserDefaults.standard.object(forKey: joystickOpacityKey) as? Double ?? 1.0
+        joystickOpacity = min(1.0, max(0.35, storedOpacity))
         let seenIntro = UserDefaults.standard.bool(forKey: introKey)
         screen = seenIntro ? .title : .intro
         syncFromCloud()
@@ -103,6 +173,15 @@ final class GameSession: ObservableObject {
 
     var isGameplayFrozen: Bool {
         isPaused || isPausedForUpgrade || isTutorialActive || outcome != nil
+    }
+
+    /// Publishes a HUD refresh. High-frequency writers should leave `force` false.
+    func publishHUD(force: Bool = false) {
+        let now = CACurrentMediaTime()
+        if force || now - lastHUDPublishTime >= hudPublishInterval {
+            lastHUDPublishTime = now
+            hudRevision &+= 1
+        }
     }
 
     var currentStore: StoreLevel? {
@@ -201,6 +280,7 @@ final class GameSession: ObservableObject {
         pendingStoreForDifficulty = nil
         isTutorialActive = !hasCompletedTutorial && !store.isEndless
         screen = .playing(storeId: store.id)
+        publishHUD(force: true)
         AudioManager.shared.playMusic()
     }
 
@@ -327,6 +407,7 @@ final class GameSession: ObservableObject {
             showToast("Friend resists pitches better")
         case .budgetRefill:
             budget = min(startingBudget, budget + startingBudget * 0.12)
+            publishHUD(force: true)
             showToast("Budget topped up")
         }
         AudioManager.shared.playSFX(.ui)

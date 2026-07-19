@@ -1,9 +1,10 @@
 import GameController
 import SpriteKit
 import SwiftUI
+import UIKit
 
 @MainActor
-final class GameScene: SKScene, SKPhysicsContactDelegate {
+final class GameScene: SKScene {
     private weak var session: GameSession?
     private var store: StoreLevel!
 
@@ -18,6 +19,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var xpOrbs: [XPOrbNode] = []
     private var interestPoints: [CGPoint] = []
     private var shelfRects: [CGRect] = []
+    private var shelfGrid = SpatialGrid(cellSize: 128)
+    private var clerkGrid = SpatialGrid(cellSize: 64)
+    private var clerkUpdateParity = 0
+    private var nameTagsVisible = true
 
     private var spawnTimer: TimeInterval = 0
     private var weaponCooldowns: [WeaponKind: TimeInterval] = [:]
@@ -33,7 +38,15 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var shoveSFXCooldown: TimeInterval = 0
     private var controllerConnectObserver: NSObjectProtocol?
     private var lastUpdateTime: TimeInterval = 0
-    private var hitParticleCooldown: TimeInterval = 0
+    private var hitFeedbackCooldown: TimeInterval = 0
+    private var defeatSFXCooldown: TimeInterval = 0
+    private var hudPublishAccumulator: TimeInterval = 0
+    private var couponLureScanAccum: TimeInterval = 0
+    private var walkableInterestPoints: [CGPoint] = []
+    private var weaponHitBuffer: [ClerkNode] = []
+    private var fpsLastTime: TimeInterval = 0
+    private var fpsFrameCount = 0
+    private var fpsAccum: TimeInterval = 0
 
     func configure(session: GameSession, store: StoreLevel) {
         self.session = session
@@ -43,9 +56,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     override func didMove(to view: SKView) {
         backgroundColor = UIColor(store.floorColor)
         physicsWorld.gravity = .zero
-        physicsWorld.contactDelegate = self
         isUserInteractionEnabled = true
         lastUpdateTime = 0
+        fpsLastTime = 0
+        fpsFrameCount = 0
+        fpsAccum = 0
+        view.preferredFramesPerSecond = 60
+        view.ignoresSiblingOrder = true
 
         addChild(worldNode)
         worldNode.addChild(entityNode)
@@ -71,49 +88,21 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             self.controllerConnectObserver = nil
         }
         lastUpdateTime = 0
+        fpsLastTime = 0
+        fpsFrameCount = 0
+        fpsAccum = 0
     }
 
     private func buildArena() {
         interestPoints.removeAll()
         shelfRects.removeAll()
+        shelfGrid.clear()
+        walkableInterestPoints.removeAll()
 
-        let floor = SKSpriteNode(color: UIColor(store.floorColor), size: arenaSize)
+        let floorTexture = makeFloorTexture()
+        let floor = SKSpriteNode(texture: floorTexture, size: arenaSize)
         floor.zPosition = -10
         worldNode.addChild(floor)
-
-        let tileSize: CGFloat = 64
-        let cols = Int(arenaSize.width / tileSize)
-        let rows = Int(arenaSize.height / tileSize)
-        for r in 0..<rows {
-            for c in 0..<cols {
-                let useFloorTile = (r + c) % 3 == 0
-                if useFloorTile {
-                    let texture = SKTexture(imageNamed: "floor_tile")
-                    texture.filteringMode = .nearest
-                    let tile = SKSpriteNode(texture: texture, size: CGSize(width: tileSize, height: tileSize))
-                    tile.position = CGPoint(
-                        x: -arenaSize.width / 2 + tileSize / 2 + CGFloat(c) * tileSize,
-                        y: -arenaSize.height / 2 + tileSize / 2 + CGFloat(r) * tileSize
-                    )
-                    tile.zPosition = -9
-                    tile.color = UIColor(store.accentColor)
-                    tile.colorBlendFactor = store.isEndless ? 0.45 : 0.28
-                    tile.alpha = 0.55
-                    worldNode.addChild(tile)
-                } else if (r + c) % 2 != 0 {
-                    let tile = SKSpriteNode(
-                        color: UIColor(store.accentColor).withAlphaComponent(0.08),
-                        size: CGSize(width: tileSize, height: tileSize)
-                    )
-                    tile.position = CGPoint(
-                        x: -arenaSize.width / 2 + tileSize / 2 + CGFloat(c) * tileSize,
-                        y: -arenaSize.height / 2 + tileSize / 2 + CGFloat(r) * tileSize
-                    )
-                    tile.zPosition = -9
-                    worldNode.addChild(tile)
-                }
-            }
-        }
 
         let shelfTarget = store.shelfCount
         var placed = 0
@@ -146,12 +135,14 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             placed += 1
 
             let inset: CGFloat = 4
-            shelfRects.append(CGRect(
+            let rect = CGRect(
                 x: pos.x - shelfSize.width / 2 + inset,
                 y: pos.y - shelfSize.height / 2 + inset,
                 width: shelfSize.width - inset * 2,
                 height: shelfSize.height - inset * 2
-            ))
+            )
+            shelfRects.append(rect)
+            shelfGrid.insert(shelfRects.count - 1, at: CGPoint(x: rect.midX, y: rect.midY))
 
             // Browse spots beside shelves (clear of collision boxes)
             let sideSpots = [
@@ -186,6 +177,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         if interestPoints.isEmpty {
             interestPoints.append(.zero)
         }
+        walkableInterestPoints = interestPoints
 
         let border = SKShapeNode(rectOf: arenaSize)
         border.strokeColor = UIColor(store.accentColor).withAlphaComponent(0.6)
@@ -193,18 +185,44 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         border.fillColor = .clear
         border.zPosition = -8
         worldNode.addChild(border)
+    }
 
-        let wallBody = SKPhysicsBody(edgeLoopFrom: CGRect(
-            x: -arenaSize.width / 2,
-            y: -arenaSize.height / 2,
-            width: arenaSize.width,
-            height: arenaSize.height
-        ))
-        wallBody.categoryBitMask = PhysicsCategory.wall
-        wallBody.friction = 0
-        let walls = SKNode()
-        walls.physicsBody = wallBody
-        worldNode.addChild(walls)
+    /// Bake checkerboard / floor tiles into one texture to cut hundreds of scene nodes.
+    private func makeFloorTexture() -> SKTexture {
+        let size = arenaSize
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let accent = UIColor(store.accentColor)
+        let tileTint = accent.withAlphaComponent(store.isEndless ? 0.25 : 0.16)
+        let floorTile = UIImage(named: "floor_tile")
+        let image = renderer.image { ctx in
+            UIColor(store.floorColor).setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
+
+            let tileSize: CGFloat = 64
+            let cols = Int(ceil(size.width / tileSize))
+            let rows = Int(ceil(size.height / tileSize))
+            for r in 0..<rows {
+                for c in 0..<cols {
+                    let rect = CGRect(
+                        x: CGFloat(c) * tileSize,
+                        y: CGFloat(r) * tileSize,
+                        width: tileSize,
+                        height: tileSize
+                    )
+                    if (r + c) % 3 == 0 {
+                        floorTile?.draw(in: rect, blendMode: .normal, alpha: 0.55)
+                        tileTint.setFill()
+                        ctx.fill(rect)
+                    } else if (r + c) % 2 != 0 {
+                        accent.withAlphaComponent(0.08).setFill()
+                        ctx.fill(rect)
+                    }
+                }
+            }
+        }
+        let texture = SKTexture(image: image)
+        texture.filteringMode = .linear
+        return texture
     }
 
     private func spawnPlayerAndCompanion() {
@@ -220,6 +238,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     override func update(_ currentTime: TimeInterval) {
         guard let session, session.outcome == nil else { return }
+        sampleFPS(currentTime: currentTime, session: session)
         if GameControllerManager.shared.isConnected {
             GameControllerManager.shared.pollMovement(into: session)
         }
@@ -245,12 +264,15 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         elapsed += dt
         session.runElapsed = elapsed
         shoveSFXCooldown = max(0, shoveSFXCooldown - dt)
-        hitParticleCooldown = max(0, hitParticleCooldown - dt)
+        hitFeedbackCooldown = max(0, hitFeedbackCooldown - dt)
+        defeatSFXCooldown = max(0, defeatSFXCooldown - dt)
+        hudPublishAccumulator += dt
 
         updateTimer(dt: dt, session: session)
         updatePlayer(dt: dt, session: session)
         updateCompanion(dt: dt)
         updateClerks(dt: dt, session: session)
+        separateClerks()
         pushClerksWithPlayer()
         updateBudgetDrain(dt: dt, session: session)
         updateSpawner(dt: dt, session: session)
@@ -263,6 +285,38 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         updatePitchBanner(dt: dt, session: session)
         syncAimGhost(session: session)
         handleCouponDeploy(session: session)
+
+        if hudPublishAccumulator >= 1.0 / 12.0 {
+            hudPublishAccumulator = 0
+            session.publishHUD()
+        }
+    }
+
+    private func sampleFPS(currentTime: TimeInterval, session: GameSession) {
+        guard session.showFPS else {
+            if fpsLastTime != 0 {
+                fpsLastTime = 0
+                fpsFrameCount = 0
+                fpsAccum = 0
+            }
+            return
+        }
+        if fpsLastTime == 0 {
+            fpsLastTime = currentTime
+            return
+        }
+        let frameDt = currentTime - fpsLastTime
+        fpsLastTime = currentTime
+        // Ignore debugger / background gaps so the counter doesn't spike to 1–2 FPS.
+        guard frameDt > 0, frameDt < 1.0 else { return }
+        fpsFrameCount += 1
+        fpsAccum += frameDt
+        if fpsAccum >= 0.5 {
+            session.displayedFPS = max(0, Int((Double(fpsFrameCount) / fpsAccum).rounded()))
+            fpsFrameCount = 0
+            fpsAccum = 0
+            session.publishHUD()
+        }
     }
 
     // MARK: - Coupon aim (touch)
@@ -304,8 +358,6 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             let ghost = CouponNode()
             ghost.alpha = 0.55
             ghost.life = 999
-            // Remove physics from ghost
-            ghost.physicsBody = nil
             entityNode.addChild(ghost)
             aimGhost = ghost
 
@@ -337,6 +389,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func deployCoupon(at point: CGPoint, session: GameSession) {
         guard session.couponCooldown <= 0 else { return }
         session.couponCooldown = session.couponMaxCooldown
+        session.publishHUD(force: true)
 
         let coupon = CouponNode()
         coupon.position = point
@@ -399,6 +452,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         } else {
             session.timeRemaining = max(0, session.timeRemaining - dt)
             if session.timeRemaining <= 0 {
+                session.publishHUD(force: true)
                 session.endRun(won: session.budget > 0, storeId: store.id)
             }
         }
@@ -477,11 +531,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func pickCompanionInterestPoint() -> CGPoint? {
-        let options = interestPoints.filter { point in
-            !reached(companion.position, point) && isWalkable(point, radius: 14)
-        }
+        let options = walkableInterestPoints.filter { !reached(companion.position, $0) }
         if let pick = options.randomElement() { return pick }
-        return interestPoints.filter { isWalkable($0, radius: 14) }.randomElement() ?? interestPoints.randomElement()
+        return walkableInterestPoints.randomElement()
     }
 
     /// Direct move, then axis slides if a shelf blocks the path.
@@ -532,7 +584,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         guard Double.random(in: 0...1) < 0.72 else { return }
         guard let line = CompanionNode.shoppingLines.randomElement() else { return }
         companion.chatCooldown = TimeInterval.random(in: 3.5...6.5)
-        spawnCompanionChat(line, at: companion.position)
+        if session?.reducedFX != true {
+            spawnCompanionChat(line, at: companion.position)
+        }
         AudioManager.shared.playSFX(.companion, volume: 0.65)
     }
 
@@ -554,14 +608,33 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func updateClerks(dt: TimeInterval, session: GameSession) {
-        for clerk in clerks {
+        clerkUpdateParity ^= 1
+        let companionPos = companion.position
+        // Clerks farther than this from the friend update on alternating frames.
+        let nearRadiusSq: CGFloat = 320 * 320
+        let crowded = clerks.count >= 28
+
+        for (index, clerk) in clerks.enumerated() {
+            let dxC = clerk.position.x - companionPos.x
+            let dyC = clerk.position.y - companionPos.y
+            let distToFriendSq = dxC * dxC + dyC * dyC
+            let isNear = distToFriendSq <= nearRadiusSq
+            let hasKnockback = clerk.knockbackVelocity.dx != 0 || clerk.knockbackVelocity.dy != 0
+
+            // Far idle-ish clerks: half-rate sim with 2× step (keeps average speed).
+            if crowded, !isNear, !hasKnockback, (index & 1) != clerkUpdateParity {
+                clerk.pitchCooldown = max(0, clerk.pitchCooldown - dt)
+                continue
+            }
+            let stepDt = (crowded && !isNear && !hasKnockback) ? dt * 2 : dt
+
             var moving = false
             var facing: CGFloat = clerk.facingDX
 
             if clerk.lureTimeRemaining > 0, let lure = clerk.lureTarget {
-                clerk.lureTimeRemaining -= dt
+                clerk.lureTimeRemaining -= stepDt
                 let before = clerk.position
-                moveClerk(clerk, toward: lure, speed: clerk.clerkType.moveSpeed * 1.15, dt: dt)
+                moveClerk(clerk, toward: lure, speed: clerk.clerkType.moveSpeed * 1.15, dt: stepDt)
                 facing = clerk.position.x - before.x
                 moving = true
                 if clerk.lureTimeRemaining <= 0 {
@@ -569,18 +642,22 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 }
             } else {
                 let before = clerk.position
-                moveClerk(clerk, toward: companion.position, speed: clerk.clerkType.moveSpeed, dt: dt)
+                moveClerk(clerk, toward: companionPos, speed: clerk.clerkType.moveSpeed, dt: stepDt)
                 facing = clerk.position.x - before.x
-                moving = hypot(clerk.position.x - before.x, clerk.position.y - before.y) > 0.2
+                let mdx = clerk.position.x - before.x
+                let mdy = clerk.position.y - before.y
+                moving = mdx * mdx + mdy * mdy > 0.04
             }
 
-            if clerk.knockbackVelocity.dx != 0 || clerk.knockbackVelocity.dy != 0 {
+            if hasKnockback {
                 let previous = clerk.position
-                clerk.position.x += clerk.knockbackVelocity.dx * CGFloat(dt)
-                clerk.position.y += clerk.knockbackVelocity.dy * CGFloat(dt)
+                clerk.position.x += clerk.knockbackVelocity.dx * CGFloat(stepDt)
+                clerk.position.y += clerk.knockbackVelocity.dy * CGFloat(stepDt)
                 clerk.knockbackVelocity.dx *= 0.85
                 clerk.knockbackVelocity.dy *= 0.85
-                if hypot(clerk.knockbackVelocity.dx, clerk.knockbackVelocity.dy) < 5 {
+                let kvx = clerk.knockbackVelocity.dx
+                let kvy = clerk.knockbackVelocity.dy
+                if kvx * kvx + kvy * kvy < 25 {
                     clerk.knockbackVelocity = .zero
                 }
                 resolveShelfCollision(clerk, radius: 12, previous: previous)
@@ -588,19 +665,85 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             }
             clampToArena(clerk)
             clerk.facingDX = facing
-            clerk.pitchCooldown = max(0, clerk.pitchCooldown - dt)
-            clerk.walk.update(sprite: clerk, moving: moving, facingDX: clerk.facingDX, dt: dt)
+            clerk.pitchCooldown = max(0, clerk.pitchCooldown - stepDt)
+            if clerk.colorBlendFactor > 0 {
+                clerk.colorBlendFactor = max(0, clerk.colorBlendFactor - CGFloat(stepDt) * 6)
+            }
+            // Skip walk anim swaps for far clerks when crowded — big texture upload savings.
+            if isNear || !crowded {
+                clerk.walk.update(sprite: clerk, moving: moving, facingDX: clerk.facingDX, dt: stepDt)
+            }
+        }
+    }
+
+    /// Soft push via spatial grid (near-linear). Also marks upseller pack neighbors.
+    private func separateClerks() {
+        let count = clerks.count
+        guard count > 1 else {
+            clerks.first?.hasPackNeighbor = false
+            return
+        }
+
+        let minDist: CGFloat = 20
+        let minDistSq = minDist * minDist
+        let packDistSq: CGFloat = 70 * 70
+
+        for clerk in clerks {
+            clerk.hasPackNeighbor = false
+        }
+
+        clerkGrid.rebuild(count: count) { clerks[$0].position }
+
+        // cellSize 64 → radius 2 covers pack distance (~70).
+        for i in 0..<count {
+            let a = clerks[i]
+            let ap = a.position
+            clerkGrid.forEachNearby(to: ap, cellsRadius: 2) { j in
+                guard j > i else { return }
+                let b = clerks[j]
+                let dx = b.position.x - ap.x
+                let dy = b.position.y - ap.y
+                let distSq = dx * dx + dy * dy
+                guard distSq < packDistSq else { return }
+
+                if a.clerkType == .upseller { a.hasPackNeighbor = true }
+                if b.clerkType == .upseller { b.hasPackNeighbor = true }
+
+                guard distSq < minDistSq else { return }
+                if distSq < 0.01 {
+                    a.position.x -= 1
+                    b.position.x += 1
+                    return
+                }
+                let dist = sqrt(distSq)
+                let push = (minDist - dist) * 0.5
+                let nx = dx / dist
+                let ny = dy / dist
+                a.position.x -= nx * push
+                a.position.y -= ny * push
+                b.position.x += nx * push
+                b.position.y += ny * push
+            }
         }
     }
 
     private func pushClerksWithPlayer() {
         let pushRadius: CGFloat = 30
+        let pushRadiusSq = pushRadius * pushRadius
         var shoved = false
-        for clerk in clerks {
-            let dx = clerk.position.x - player.position.x
-            let dy = clerk.position.y - player.position.y
-            let dist = hypot(dx, dy)
-            guard dist < pushRadius, dist > 0.1 else { continue }
+        let px = player.position.x
+        let py = player.position.y
+        // Reuse clerk grid from separation when available; rebuild if empty.
+        if clerkGrid.buckets.isEmpty, !clerks.isEmpty {
+            clerkGrid.rebuild(count: clerks.count) { clerks[$0].position }
+        }
+        clerkGrid.forEachNearby(to: player.position, cellsRadius: 1) { index in
+            let clerk = clerks[index]
+            let dx = clerk.position.x - px
+            let dy = clerk.position.y - py
+            let distSq = dx * dx + dy * dy
+            guard distSq < pushRadiusSq, distSq > 0.01 else { return }
+            let dist = sqrt(distSq)
             let strength: CGFloat = 260
             clerk.knockbackVelocity = CGVector(dx: dx / dist * strength, dy: dy / dist * strength)
             shoved = true
@@ -615,8 +758,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func moveClerk(_ clerk: ClerkNode, toward target: CGPoint, speed: CGFloat, dt: TimeInterval) {
         let dx = target.x - clerk.position.x
         let dy = target.y - clerk.position.y
-        let dist = hypot(dx, dy)
-        guard dist > 4 else { return }
+        let distSq = dx * dx + dy * dy
+        guard distSq > 16 else { return }
+        let dist = sqrt(distSq)
         let previous = clerk.position
         clerk.position.x += dx / dist * speed * CGFloat(dt)
         clerk.position.y += dy / dist * speed * CGFloat(dt)
@@ -626,18 +770,21 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func updateBudgetDrain(dt: TimeInterval, session: GameSession) {
         var totalDrain: CGFloat = 0
         var pitchLine: String?
+        let cx = companion.position.x
+        let cy = companion.position.y
 
-        for clerk in clerks {
-            let dist = hypot(clerk.position.x - companion.position.x, clerk.position.y - companion.position.y)
-            guard dist <= clerk.clerkType.pitchRadius else { continue }
+        // Reuse the clerk grid built by separateClerks this frame (cellSize 64 > max pitch radius 55).
+        ensureClerkGrid()
+        clerkGrid.forEachNearby(to: companion.position, cellsRadius: 1) { index in
+            let clerk = clerks[index]
+            let dx = clerk.position.x - cx
+            let dy = clerk.position.y - cy
+            let radius = clerk.clerkType.pitchRadius
+            guard dx * dx + dy * dy <= radius * radius else { return }
 
             var rate = clerk.clerkType.drainPerSecond
-            if clerk.clerkType == .upseller {
-                let nearby = clerks.contains {
-                    $0 !== clerk &&
-                    hypot($0.position.x - clerk.position.x, $0.position.y - clerk.position.y) < 70
-                }
-                if nearby { rate *= clerk.clerkType.packBonus }
+            if clerk.clerkType == .upseller, clerk.hasPackNeighbor {
+                rate *= clerk.clerkType.packBonus
             }
             rate *= session.willpowerMultiplier
             totalDrain += rate * CGFloat(dt)
@@ -645,7 +792,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             if clerk.pitchCooldown <= 0 {
                 pitchLine = clerk.clerkType.pitchLines.randomElement()
                 clerk.pitchCooldown = TimeInterval.random(in: 1.8...3.2)
-                spawnPitchLabel(pitchLine ?? "Sale!", at: clerk.position)
+                if !session.reducedFX {
+                    spawnPitchLabel(pitchLine ?? "Sale!", at: clerk.position)
+                }
                 AudioManager.shared.playSFX(.pitch, volume: 0.55)
                 AudioManager.shared.playSFX(SFX.clerkVoice(clerk.clerkType), volume: 0.7)
             }
@@ -654,14 +803,16 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         if totalDrain > 0 {
             session.budget = max(0, session.budget - totalDrain)
             if totalDrain > 0.08 {
-                session.lastDrainFlash.toggle()
-                shakeTime = 0.12
+                if !session.reducedFX {
+                    shakeTime = 0.12
+                }
             }
             if let line = pitchLine {
                 session.pitchBanner = line
                 pitchBannerTimer = 1.4
             }
             if session.budget <= 0 {
+                session.publishHUD(force: true)
                 session.endRun(won: false, storeId: store.id)
             }
         }
@@ -692,6 +843,21 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         entityNode.addChild(clerk)
         clerks.append(clerk)
+        refreshClerkNameTagsIfNeeded()
+        clerk.setNameTagHidden(!shouldShowClerkNameTags)
+    }
+
+    private var shouldShowClerkNameTags: Bool {
+        clerks.count < 24 && session?.reducedFX != true
+    }
+
+    private func refreshClerkNameTagsIfNeeded() {
+        let show = shouldShowClerkNameTags
+        guard show != nameTagsVisible else { return }
+        nameTagsVisible = show
+        for clerk in clerks {
+            clerk.setNameTagHidden(!show)
+        }
     }
 
     private func updateWeapons(dt: TimeInterval, session: GameSession) {
@@ -742,11 +908,22 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         switch owned.kind {
         case .priceTags:
             let radius = owned.kind.auraRadius(level: owned.level)
-            for clerk in clerks {
-                let dist = hypot(clerk.position.x - player.position.x, clerk.position.y - player.position.y)
-                if dist <= radius {
-                    hitClerk(clerk, damage: dmg, from: player.position, session: session, knockbackStrength: 90)
+            let radiusSq = radius * radius
+            let px = player.position.x
+            let py = player.position.y
+            ensureClerkGrid()
+            let cells = max(1, Int(ceil(radius / clerkGrid.cellSize)))
+            weaponHitBuffer.removeAll(keepingCapacity: true)
+            clerkGrid.forEachNearby(to: player.position, cellsRadius: cells) { index in
+                let clerk = clerks[index]
+                let dx = clerk.position.x - px
+                let dy = clerk.position.y - py
+                if dx * dx + dy * dy <= radiusSq {
+                    weaponHitBuffer.append(clerk)
                 }
+            }
+            for clerk in weaponHitBuffer where clerk.parent != nil {
+                hitClerk(clerk, damage: dmg, from: player.position, session: session, knockbackStrength: 90)
             }
 
         case .receipts:
@@ -757,7 +934,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 let dx = target.position.x - player.position.x
                 let dy = target.position.y - player.position.y
                 let dist = max(1, hypot(dx, dy))
-                proj.physicsBody?.velocity = CGVector(dx: dx / dist * 320, dy: dy / dist * 320)
+                proj.velocity = CGVector(dx: dx / dist * 320, dy: dy / dist * 320)
                 proj.zRotation = atan2(dy, dx)
                 entityNode.addChild(proj)
                 projectiles.append(proj)
@@ -786,32 +963,55 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
         case .shoppingBag:
             let radius: CGFloat = 70 + CGFloat(owned.level) * 10
-            let pulse = SKShapeNode(circleOfRadius: radius)
-            pulse.strokeColor = SKColor(red: 1, green: 0.6, blue: 0.2, alpha: 0.8)
-            pulse.fillColor = SKColor(red: 1, green: 0.7, blue: 0.2, alpha: 0.15)
-            pulse.lineWidth = 3
-            pulse.position = player.position
-            pulse.zPosition = 24
-            entityNode.addChild(pulse)
-            pulse.run(SKAction.sequence([
-                SKAction.group([
-                    SKAction.fadeOut(withDuration: 0.35),
-                    SKAction.scale(to: 1.3, duration: 0.35)
-                ]),
-                SKAction.removeFromParent()
-            ]))
-            for clerk in clerks {
-                let dist = hypot(clerk.position.x - player.position.x, clerk.position.y - player.position.y)
-                if dist <= radius {
-                    hitClerk(clerk, damage: dmg, from: player.position, session: session, knockbackStrength: 280)
+            if session.reducedFX == false {
+                let pulse = SKShapeNode(circleOfRadius: radius)
+                pulse.strokeColor = SKColor(red: 1, green: 0.6, blue: 0.2, alpha: 0.8)
+                pulse.fillColor = SKColor(red: 1, green: 0.7, blue: 0.2, alpha: 0.15)
+                pulse.lineWidth = 3
+                pulse.position = player.position
+                pulse.zPosition = 24
+                entityNode.addChild(pulse)
+                pulse.run(SKAction.sequence([
+                    SKAction.group([
+                        SKAction.fadeOut(withDuration: 0.35),
+                        SKAction.scale(to: 1.3, duration: 0.35)
+                    ]),
+                    SKAction.removeFromParent()
+                ]))
+            }
+            let radiusSq = radius * radius
+            let px = player.position.x
+            let py = player.position.y
+            ensureClerkGrid()
+            let cells = max(1, Int(ceil(radius / clerkGrid.cellSize)))
+            weaponHitBuffer.removeAll(keepingCapacity: true)
+            clerkGrid.forEachNearby(to: player.position, cellsRadius: cells) { index in
+                let clerk = clerks[index]
+                let dx = clerk.position.x - px
+                let dy = clerk.position.y - py
+                if dx * dx + dy * dy <= radiusSq {
+                    weaponHitBuffer.append(clerk)
                 }
             }
+            for clerk in weaponHitBuffer where clerk.parent != nil {
+                hitClerk(clerk, damage: dmg, from: player.position, session: session, knockbackStrength: 280)
+            }
+        }
+    }
+
+    private func ensureClerkGrid() {
+        if clerkGrid.buckets.isEmpty, !clerks.isEmpty {
+            clerkGrid.rebuild(count: clerks.count) { clerks[$0].position }
         }
     }
 
     private func playWeaponFireSFX(_ kind: WeaponKind) {
         switch kind {
-        case .priceTags: AudioManager.shared.playSFX(.aura, volume: 0.28)
+        // Aura ticks very often while overlapping clerks — keep it quiet / occasional.
+        case .priceTags:
+            if hitFeedbackCooldown <= 0 {
+                AudioManager.shared.playSFX(.aura, volume: 0.22)
+            }
         case .receipts: AudioManager.shared.playSFX(.receipt, volume: 0.4)
         case .barcodeLaser: AudioManager.shared.playSFX(.laser, volume: 0.35)
         case .shoppingBag: AudioManager.shared.playSFX(.bag, volume: 0.45)
@@ -824,7 +1024,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             projectiles.removeAll()
             return
         }
-        var keep: [ProjectileNode] = []
+        let hitRadiusSq: CGFloat = 20 * 20
+        var writeIndex = 0
         for proj in projectiles {
             proj.life -= dt
             if proj.life <= 0 || proj.pierceLeft <= 0 {
@@ -832,36 +1033,56 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 continue
             }
             if proj.weapon == .receipts {
-                for clerk in clerks {
-                    let dist = hypot(clerk.position.x - proj.position.x, clerk.position.y - proj.position.y)
-                    if dist < 20 {
+                proj.position.x += proj.velocity.dx * CGFloat(dt)
+                proj.position.y += proj.velocity.dy * CGFloat(dt)
+                let px = proj.position.x
+                let py = proj.position.y
+                ensureClerkGrid()
+                var hit = false
+                clerkGrid.forEachNearby(to: proj.position, cellsRadius: 1) { index in
+                    guard !hit, index < clerks.count else { return }
+                    let clerk = clerks[index]
+                    let dx = clerk.position.x - px
+                    let dy = clerk.position.y - py
+                    if dx * dx + dy * dy < hitRadiusSq {
                         hitClerk(clerk, damage: proj.damage, from: proj.position, session: session)
                         proj.pierceLeft -= 1
-                        break
+                        hit = true
                     }
                 }
             }
             if proj.pierceLeft > 0 && proj.life > 0 && proj.parent != nil {
-                keep.append(proj)
+                projectiles[writeIndex] = proj
+                writeIndex += 1
             } else {
                 proj.removeFromParent()
             }
         }
-        projectiles = keep
+        if writeIndex < projectiles.count {
+            projectiles.removeLast(projectiles.count - writeIndex)
+        }
     }
 
     private func updateCoupons(dt: TimeInterval, session: GameSession) {
+        couponLureScanAccum += dt
+        let scanLure = couponLureScanAccum >= 0.25
+        if scanLure { couponLureScanAccum = 0 }
+
         var keep: [CouponNode] = []
         for coupon in coupons {
             coupon.life -= dt
             if coupon.life <= 0 {
                 coupon.removeFromParent()
             } else {
-                for clerk in clerks where clerk.lureTarget == nil {
-                    let dist = hypot(clerk.position.x - coupon.position.x, clerk.position.y - coupon.position.y)
-                    if dist <= coupon.lureRadius {
-                        clerk.lureTarget = coupon.position
-                        clerk.lureTimeRemaining = min(3.0, coupon.life)
+                if scanLure {
+                    let lureRadiusSq = coupon.lureRadius * coupon.lureRadius
+                    for clerk in clerks where clerk.lureTarget == nil {
+                        let dx = clerk.position.x - coupon.position.x
+                        let dy = clerk.position.y - coupon.position.y
+                        if dx * dx + dy * dy <= lureRadiusSq {
+                            clerk.lureTarget = coupon.position
+                            clerk.lureTimeRemaining = min(3.0, coupon.life)
+                        }
                     }
                 }
                 keep.append(coupon)
@@ -872,17 +1093,21 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func updateXPOrbs(dt: TimeInterval, session: GameSession) {
         let magnetRange: CGFloat = 70 + CGFloat(session.playerLevel) * 4
+        let magnetRangeSq = magnetRange * magnetRange
         var keep: [XPOrbNode] = []
         for orb in xpOrbs {
             let dx = player.position.x - orb.position.x
             let dy = player.position.y - orb.position.y
-            let dist = hypot(dx, dy)
-            if dist < 22 {
+            let distSq = dx * dx + dy * dy
+            if distSq < 22 * 22 {
                 gainXP(orb.amount, session: session)
-                session.showToast("+\(orb.amount) XP")
-                AudioManager.shared.playSFX(.xp)
+                if hitFeedbackCooldown <= 0 {
+                    AudioManager.shared.playSFX(.xp)
+                    hitFeedbackCooldown = 0.05
+                }
                 orb.removeFromParent()
-            } else if dist < magnetRange {
+            } else if distSq < magnetRangeSq {
+                let dist = sqrt(distSq)
                 orb.position.x += dx / dist * 220 * CGFloat(dt)
                 orb.position.y += dy / dist * 220 * CGFloat(dt)
                 keep.append(orb)
@@ -902,15 +1127,20 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     ) {
         let dx = clerk.position.x - from.x
         let dy = clerk.position.y - from.y
-        let dist = max(1, hypot(dx, dy))
+        let distSq = max(1, dx * dx + dy * dy)
+        let dist = sqrt(distSq)
         let kb = CGVector(dx: dx / dist * knockbackStrength, dy: dy / dist * knockbackStrength)
-        clerk.applyDamage(damage, knockback: kb)
-        AudioManager.shared.playSFX(.hit, volume: 0.55)
-        if hitParticleCooldown <= 0 {
-            spawnHitSparks(at: clerk.position)
-            hitParticleCooldown = 0.05
+        // Cheap flash (no SKAction) — AoE used to spawn dozens of colorize actions per tick.
+        let allowFlash = !session.reducedFX && clerks.count < 50
+        clerk.applyDamage(damage, knockback: kb, flash: allowFlash)
+
+        // One shared feedback window for SFX / haptics (aura/bag can hit 20+ clerks).
+        if hitFeedbackCooldown <= 0 {
+            AudioManager.shared.playSFX(.hit, volume: 0.5)
             Haptics.hit()
+            hitFeedbackCooldown = session.reducedFX ? 0.12 : 0.07
         }
+
         if clerk.hp <= 0 {
             defeatClerk(clerk, session: session)
         }
@@ -918,46 +1148,34 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func defeatClerk(_ clerk: ClerkNode, session: GameSession) {
         guard let idx = clerks.firstIndex(where: { $0 === clerk }) else { return }
-        clerks.remove(at: idx)
-        AudioManager.shared.playSFX(.defeat)
-        spawnHitSparks(at: clerk.position, count: 10)
+        let last = clerks.count - 1
+        if idx < last { clerks[idx] = clerks[last] }
+        clerks.removeLast()
+        clerkGrid.clear()  // invalidate — removal changes indices, ensureClerkGrid rebuilds on next use
+        refreshClerkNameTagsIfNeeded()
+        if defeatSFXCooldown <= 0 {
+            AudioManager.shared.playSFX(.defeat)
+            defeatSFXCooldown = 0.09
+        }
 
         let orb = XPOrbNode(amount: clerk.clerkType.xpReward)
         orb.position = clerk.position
         entityNode.addChild(orb)
         xpOrbs.append(orb)
 
+        clerk.removeAllActions()
+        clerk.colorBlendFactor = 0
         clerk.run(SKAction.sequence([
             SKAction.group([
-                SKAction.fadeOut(withDuration: 0.15),
-                SKAction.scale(to: 0.3, duration: 0.15)
+                SKAction.fadeOut(withDuration: 0.12),
+                SKAction.scale(to: 0.3, duration: 0.12)
             ]),
             SKAction.removeFromParent()
         ]))
     }
 
-    private func spawnHitSparks(at position: CGPoint, count: Int = 5) {
-        for _ in 0..<count {
-            let spark = SKShapeNode(circleOfRadius: CGFloat.random(in: 1.5...3.2))
-            spark.fillColor = SKColor(red: 1, green: CGFloat.random(in: 0.7...0.95), blue: 0.3, alpha: 1)
-            spark.strokeColor = .clear
-            spark.position = position
-            spark.zPosition = 50
-            entityNode.addChild(spark)
-            let dx = CGFloat.random(in: -40...40)
-            let dy = CGFloat.random(in: -40...40)
-            spark.run(SKAction.sequence([
-                SKAction.group([
-                    SKAction.moveBy(x: dx, y: dy, duration: 0.28),
-                    SKAction.fadeOut(withDuration: 0.28),
-                    SKAction.scale(to: 0.2, duration: 0.28)
-                ]),
-                SKAction.removeFromParent()
-            ]))
-        }
-    }
-
     private func spawnLevelUpFlash() {
+        guard session?.reducedFX != true else { return }
         let flash = SKShapeNode(circleOfRadius: 40)
         flash.fillColor = SKColor(red: 0.3, green: 0.9, blue: 1.0, alpha: 0.35)
         flash.strokeColor = SKColor(red: 0.5, green: 1.0, blue: 1.0, alpha: 0.8)
@@ -1004,11 +1222,34 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func nearestClerks(count: Int) -> [ClerkNode] {
-        clerks
-            .map { ($0, hypot($0.position.x - player.position.x, $0.position.y - player.position.y)) }
-            .sorted { $0.1 < $1.1 }
-            .prefix(count)
-            .map(\.0)
+        guard count > 0, !clerks.isEmpty else { return [] }
+        let px = player.position.x
+        let py = player.position.y
+        if clerks.count <= count {
+            return clerks.sorted {
+                let d0 = ($0.position.x - px) * ($0.position.x - px) + ($0.position.y - py) * ($0.position.y - py)
+                let d1 = ($1.position.x - px) * ($1.position.x - px) + ($1.position.y - py) * ($1.position.y - py)
+                return d0 < d1
+            }
+        }
+
+        var best: [(ClerkNode, CGFloat)] = []
+        best.reserveCapacity(count)
+        for clerk in clerks {
+            let dx = clerk.position.x - px
+            let dy = clerk.position.y - py
+            let distSq = dx * dx + dy * dy
+            if best.count < count {
+                best.append((clerk, distSq))
+                if best.count == count {
+                    best.sort { $0.1 < $1.1 }
+                }
+            } else if distSq < best[count - 1].1 {
+                best[count - 1] = (clerk, distSq)
+                best.sort { $0.1 < $1.1 }
+            }
+        }
+        return best.map(\.0)
     }
 
     private func updateCamera(dt: TimeInterval) {
@@ -1017,10 +1258,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         cameraNode.position.x += (target.x - cameraNode.position.x) * blend
         cameraNode.position.y += (target.y - cameraNode.position.y) * blend
 
-        if shakeTime > 0 {
+        if shakeTime > 0, session?.reducedFX != true {
             shakeTime -= dt
             cameraNode.position.x += CGFloat.random(in: -3...3)
             cameraNode.position.y += CGFloat.random(in: -3...3)
+        } else if shakeTime > 0 {
+            shakeTime = 0
         }
 
         session?.cameraWorldPosition = cameraNode.position
@@ -1081,26 +1324,50 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     /// Push a circular body out of shelf rectangles (manual movement, not physics-driven).
     private func resolveShelfCollision(_ node: SKNode, radius: CGFloat, previous: CGPoint) {
         var p = node.position
-        for rect in shelfRects {
-            let nearestX = min(max(p.x, rect.minX), rect.maxX)
-            let nearestY = min(max(p.y, rect.minY), rect.maxY)
-            let dx = p.x - nearestX
-            let dy = p.y - nearestY
-            let distSq = dx * dx + dy * dy
-            if distSq < radius * radius {
-                if distSq < 0.001 {
-                    // Center inside shelf — revert axis that penetrated least from previous
-                    p = previous
-                } else {
-                    let dist = sqrt(distSq)
-                    let push = (radius - dist) / dist
-                    p.x += dx * push
-                    p.y += dy * push
-                }
+        let radiusSq = radius * radius
+        if shelfRects.count <= 6 {
+            for rect in shelfRects {
+                resolveShelfRect(rect, radius: radius, radiusSq: radiusSq, previous: previous, into: &p)
             }
+        } else {
+            var resolved = p
+            shelfGrid.forEachNearby(to: p, cellsRadius: 1) { index in
+                resolveShelfRect(
+                    shelfRects[index],
+                    radius: radius,
+                    radiusSq: radiusSq,
+                    previous: previous,
+                    into: &resolved
+                )
+            }
+            p = resolved
         }
         node.position = p
         clampToArena(node)
+    }
+
+    private func resolveShelfRect(
+        _ rect: CGRect,
+        radius: CGFloat,
+        radiusSq: CGFloat,
+        previous: CGPoint,
+        into p: inout CGPoint
+    ) {
+        let nearestX = min(max(p.x, rect.minX), rect.maxX)
+        let nearestY = min(max(p.y, rect.minY), rect.maxY)
+        let dx = p.x - nearestX
+        let dy = p.y - nearestY
+        let distSq = dx * dx + dy * dy
+        if distSq < radiusSq {
+            if distSq < 0.001 {
+                p = previous
+            } else {
+                let dist = sqrt(distSq)
+                let push = (radius - dist) / dist
+                p.x += dx * push
+                p.y += dy * push
+            }
+        }
     }
 
     private func clampPoint(_ p: CGPoint) -> CGPoint {
@@ -1123,6 +1390,4 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let cy = a.y + aby * t
         return hypot(p.x - cx, p.y - cy) < threshold
     }
-
-    func didBegin(_ contact: SKPhysicsContact) {}
 }

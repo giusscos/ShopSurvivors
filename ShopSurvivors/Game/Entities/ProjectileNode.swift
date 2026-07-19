@@ -5,6 +5,8 @@ final class ProjectileNode: SKSpriteNode {
     let weapon: WeaponKind
     var life: TimeInterval
     var pierceLeft: Int
+    /// Manual velocity for receipts (no physics body).
+    var velocity: CGVector = .zero
 
     init(weapon: WeaponKind, damage: CGFloat, life: TimeInterval = 1.2, pierce: Int = 1) {
         self.weapon = weapon
@@ -22,13 +24,6 @@ final class ProjectileNode: SKSpriteNode {
         super.init(texture: tex, color: .clear, size: size)
         name = "projectile"
         zPosition = 25
-
-        physicsBody = SKPhysicsBody(circleOfRadius: min(size.width, size.height) * 0.4)
-        physicsBody?.affectedByGravity = false
-        physicsBody?.allowsRotation = false
-        physicsBody?.categoryBitMask = PhysicsCategory.projectile
-        physicsBody?.collisionBitMask = PhysicsCategory.none
-        physicsBody?.contactTestBitMask = PhysicsCategory.clerk
     }
 
     @available(*, unavailable)

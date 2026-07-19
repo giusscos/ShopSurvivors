@@ -21,7 +21,7 @@ struct GameContainerView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                SpriteView(scene: scene, preferredFramesPerSecond: 120, options: [.allowsTransparency])
+                SpriteView(scene: scene, preferredFramesPerSecond: 60, options: [.allowsTransparency])
                     .ignoresSafeArea()
 
                 VStack {
@@ -98,7 +98,9 @@ struct GameContainerView: View {
     }
 
     private var topHUD: some View {
-        HStack(alignment: .top) {
+        // Touch hudRevision so throttled gameplay stats refresh the HUD.
+        let _ = session.hudRevision
+        return HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
                 budgetBar
                 xpBar
@@ -122,10 +124,30 @@ struct GameContainerView: View {
             }
             Spacer()
             HStack(spacing: 8) {
+                if session.showFPS {
+                    fpsBadge
+                }
                 timerBadge
                 pauseButton
             }
         }
+    }
+
+    private var fpsBadge: some View {
+        let fps = session.displayedFPS
+        let color: Color = {
+            if fps >= 50 { return Color(red: 0.35, green: 0.9, blue: 0.55) }
+            if fps >= 28 { return Color(red: 1.0, green: 0.85, blue: 0.3) }
+            return Color.red
+        }()
+        return Text("\(fps) FPS")
+            .font(.system(size: 12, weight: .bold, design: .monospaced))
+            .foregroundStyle(color)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.black.opacity(0.35))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityLabel("\(fps) frames per second")
     }
 
     private var pauseButton: some View {
@@ -212,21 +234,39 @@ struct GameContainerView: View {
     }
 
     private func bottomHUD(geo: GeometryProxy) -> some View {
-        HStack(alignment: .bottom) {
-            if !controllerManager.isConnected && !controllerManager.keyboardActive {
-                VirtualJoystick(vector: $joystickVector)
-                    .padding(.leading, 8)
-                    .opacity(session.isPaused || session.isTutorialActive ? 0.3 : 1)
-                    .disabled(session.isPaused || session.isPausedForUpgrade || session.isTutorialActive)
+        let showJoystick = !controllerManager.isConnected && !controllerManager.keyboardActive
+        let joystickPaused = session.isPaused || session.isTutorialActive
+        let joystickDisabled = session.isPaused || session.isPausedForUpgrade || session.isTutorialActive
+
+        return HStack(alignment: .bottom) {
+            if showJoystick, !session.joystickOnRight {
+                touchJoystick(paused: joystickPaused, disabled: joystickDisabled)
             }
 
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 8) {
-                weaponChips
-                couponControl(geo: geo)
+            if session.joystickOnRight {
+                VStack(alignment: .leading, spacing: 8) {
+                    weaponChips
+                    couponControl(geo: geo)
+                }
+                Spacer()
+                if showJoystick {
+                    touchJoystick(paused: joystickPaused, disabled: joystickDisabled)
+                }
+            } else {
+                Spacer()
+                VStack(alignment: .trailing, spacing: 8) {
+                    weaponChips
+                    couponControl(geo: geo)
+                }
             }
         }
+    }
+
+    private func touchJoystick(paused: Bool, disabled: Bool) -> some View {
+        VirtualJoystick(vector: $joystickVector, size: session.joystickSize)
+            .padding(session.joystickOnRight ? .trailing : .leading, 8)
+            .opacity((paused ? 0.3 : 1) * session.joystickOpacity)
+            .disabled(disabled)
     }
 
     private var weaponChips: some View {
@@ -251,6 +291,7 @@ struct GameContainerView: View {
 
     /// Hold on the button and drag onto the arena; release to drop.
     private func couponControl(geo: GeometryProxy) -> some View {
+        let _ = session.hudRevision
         let ready = session.couponCooldown <= 0
         return ZStack {
             Circle()
@@ -276,8 +317,9 @@ struct GameContainerView: View {
                 }
             }
         }
-        .padding(.trailing, 12)
+        .padding(.trailing, session.joystickOnRight ? 4 : 12)
         .padding(.bottom, 4)
+        .padding(.leading, session.joystickOnRight ? 12 : 4)
         .opacity(ready ? 1 : 0.7)
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .named("game"))

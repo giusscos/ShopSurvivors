@@ -12,14 +12,6 @@ final class PlayerNode: SKSpriteNode {
         name = "player"
         zPosition = 20
 
-        physicsBody = SKPhysicsBody(circleOfRadius: 14)
-        physicsBody?.affectedByGravity = false
-        physicsBody?.allowsRotation = false
-        physicsBody?.linearDamping = 8
-        physicsBody?.categoryBitMask = PhysicsCategory.player
-        physicsBody?.collisionBitMask = PhysicsCategory.wall
-        physicsBody?.contactTestBitMask = PhysicsCategory.xpOrb
-
         let tag = SKLabelNode(fontNamed: "Menlo-Bold")
         tag.text = "YOU"
         tag.fontSize = 9

@@ -2,12 +2,20 @@ import SpriteKit
 
 /// 3-frame walk cycle using `name_idle`, `name_walk1`, `name_walk2`.
 final class WalkAnimator {
+    private static var textureCache: [String: [SKTexture]] = [:]
+
     private let textures: [SKTexture]
     private var frameIndex = 0
     private var timer: TimeInterval = 0
     private let frameDuration: TimeInterval = 0.14
+    private var lastFacingSign: CGFloat = 0
 
     init(baseName: String) {
+        if let cached = Self.textureCache[baseName] {
+            textures = cached
+            return
+        }
+
         let names = ["\(baseName)_idle", "\(baseName)_walk1", "\(baseName)_walk2"]
         var loaded: [SKTexture] = []
         for n in names {
@@ -21,26 +29,39 @@ final class WalkAnimator {
         while loaded.count < 3 {
             loaded.append(loaded.last ?? SKTexture(imageNamed: baseName))
         }
+        Self.textureCache[baseName] = loaded
         textures = loaded
     }
 
     func update(sprite: SKSpriteNode, moving: Bool, facingDX: CGFloat, dt: TimeInterval) {
+        let facingSign: CGFloat
         if facingDX < -0.15 {
-            sprite.xScale = -1
+            facingSign = -1
         } else if facingDX > 0.15 {
-            sprite.xScale = 1
+            facingSign = 1
+        } else {
+            facingSign = lastFacingSign == 0 ? 1 : lastFacingSign
         }
 
-        // Keep name tags readable when the parent sprite faces left.
-        let labelScale: CGFloat = sprite.xScale < 0 ? -1 : 1
-        for case let label as SKLabelNode in sprite.children {
-            label.xScale = labelScale
+        if facingSign != lastFacingSign {
+            lastFacingSign = facingSign
+            sprite.xScale = facingSign
+            if let clerk = sprite as? ClerkNode {
+                clerk.syncNameTagFacing()
+            } else {
+                let labelScale: CGFloat = facingSign < 0 ? -1 : 1
+                for case let label as SKLabelNode in sprite.children {
+                    label.xScale = labelScale
+                }
+            }
         }
 
         guard moving else {
-            frameIndex = 0
+            if frameIndex != 0 {
+                frameIndex = 0
+                sprite.texture = textures[0]
+            }
             timer = 0
-            sprite.texture = textures[0]
             return
         }
 

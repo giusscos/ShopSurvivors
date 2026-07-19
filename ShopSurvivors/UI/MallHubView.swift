@@ -24,7 +24,7 @@ struct MallHubView: View {
 
     var body: some View {
         ZStack {
-            SpriteView(scene: scene, preferredFramesPerSecond: 120, options: [.allowsTransparency])
+            SpriteView(scene: scene, preferredFramesPerSecond: 60, options: [.allowsTransparency])
                 .ignoresSafeArea()
                 .id("\(session.unlockedStoreIndex)-\(session.mallCleared)-\(session.bestScoresRevision)")
 
@@ -105,20 +105,31 @@ struct MallHubView: View {
                 Spacer()
 
                 HStack(alignment: .bottom) {
-                    if !controllerManager.isConnected && !controllerManager.keyboardActive {
-                        VirtualJoystick(vector: $joystickVector, locked: isDifficultyPickerOpen)
-                            .id(joystickEpoch)
-                            .padding(.leading, 28)
-                            .padding(.bottom, 16)
+                    if !controllerManager.isConnected && !controllerManager.keyboardActive, !session.joystickOnRight {
+                        mallJoystick
                     }
-                    Spacer()
-                    Text(session.mallCleared
-                         ? "Walk into a door — Midnight Mall is open"
-                         : "Walk into a door to shop")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.55))
-                        .padding(.trailing, 24)
-                        .padding(.bottom, 24)
+                    if session.joystickOnRight {
+                        Text(session.mallCleared
+                             ? "Walk into a door — Midnight Mall is open"
+                             : "Walk into a door to shop")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .padding(.leading, 24)
+                            .padding(.bottom, 24)
+                        Spacer()
+                        if !controllerManager.isConnected && !controllerManager.keyboardActive {
+                            mallJoystick
+                        }
+                    } else {
+                        Spacer()
+                        Text(session.mallCleared
+                             ? "Walk into a door — Midnight Mall is open"
+                             : "Walk into a door to shop")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .padding(.trailing, 24)
+                            .padding(.bottom, 24)
+                    }
                 }
             }
         }
@@ -156,5 +167,17 @@ struct MallHubView: View {
         s.scaleMode = .resizeFill
         s.configure(session: session)
         scene = s
+    }
+
+    private var mallJoystick: some View {
+        VirtualJoystick(
+            vector: $joystickVector,
+            size: session.joystickSize,
+            locked: isDifficultyPickerOpen
+        )
+        .id(joystickEpoch)
+        .padding(session.joystickOnRight ? .trailing : .leading, 28)
+        .padding(.bottom, 16)
+        .opacity(session.joystickOpacity)
     }
 }
