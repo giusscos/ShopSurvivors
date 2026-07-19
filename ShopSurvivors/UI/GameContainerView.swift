@@ -186,24 +186,29 @@ struct GameContainerView: View {
 
     private var xpBar: some View {
         let pct = CGFloat(session.xp) / CGFloat(max(1, session.xpToNext))
+        let accent = Color(red: 0.2, green: 0.85, blue: 0.9)
         return HStack(spacing: 8) {
             Text("LV \(session.playerLevel)")
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.2, green: 0.85, blue: 0.9))
+                .font(.system(size: 16, weight: .black, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(accent)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.black.opacity(0.35))
+                    Capsule().fill(Color.black.opacity(0.4))
                     Capsule()
-                        .fill(Color(red: 0.2, green: 0.85, blue: 0.9))
+                        .fill(accent)
                         .frame(width: geo.size.width * pct)
                 }
             }
-            .frame(height: 8)
-            Text("XP")
-                .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.2, green: 0.85, blue: 0.9).opacity(0.8))
+            .frame(width: 140, height: 12)
         }
-        .frame(maxWidth: 240)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.black.opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func bottomHUD(geo: GeometryProxy) -> some View {
