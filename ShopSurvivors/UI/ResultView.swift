@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ResultView: View {
     @ObservedObject var session: GameSession
+    @ObservedObject private var gc = GameCenterManager.shared
     let store: StoreLevel
 
     private var nextStore: StoreLevel? {
@@ -45,6 +46,21 @@ struct ResultView: View {
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.55))
                         .multilineTextAlignment(.center)
+                }
+
+                if session.outcome == .won, gc.isAuthenticated {
+                    Button {
+                        AudioManager.shared.playSFX(.ui)
+                        GameCenterManager.shared.showLeaderboard(storeId: store.id)
+                    } label: {
+                        Label("Leaderboard", systemImage: "trophy.fill")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color(red: 0.22, green: 0.55, blue: 0.95).opacity(0.85))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
                 }
 
                 HStack(spacing: 12) {

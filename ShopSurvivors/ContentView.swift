@@ -27,6 +27,10 @@ struct ContentView: View {
         }
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
+        .task {
+            GameCenterManager.shared.authenticate()
+            GameControllerManager.shared.startMonitoring()
+        }
     }
 }
 

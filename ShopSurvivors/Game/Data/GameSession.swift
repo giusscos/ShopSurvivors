@@ -76,13 +76,17 @@ final class GameSession: ObservableObject {
         isPaused || isPausedForUpgrade || isTutorialActive || outcome != nil
     }
 
-    func goTitle() {
-        screen = .title
+    private func resetGameState() {
         outcome = nil
         isPausedForUpgrade = false
         isPaused = false
         isTutorialActive = false
         isAimingCoupon = false
+    }
+
+    func goTitle() {
+        resetGameState()
+        screen = .title
         AudioManager.shared.playMusic()
     }
 
@@ -92,41 +96,25 @@ final class GameSession: ObservableObject {
     }
 
     func requestLoreIntroReplay() {
+        resetGameState()
         hasSeenLoreIntro = false
         screen = .intro
-        outcome = nil
-        isPausedForUpgrade = false
-        isPaused = false
-        isTutorialActive = false
-        isAimingCoupon = false
     }
 
     func goHowToPlay() {
+        resetGameState()
         screen = .howToPlay
-        outcome = nil
-        isPausedForUpgrade = false
-        isPaused = false
-        isTutorialActive = false
-        isAimingCoupon = false
     }
 
     func goSettings() {
+        resetGameState()
         screen = .settings
-        outcome = nil
-        isPausedForUpgrade = false
-        isPaused = false
-        isTutorialActive = false
-        isAimingCoupon = false
     }
 
     func goLevelSelect() {
-        screen = .levelSelect
-        outcome = nil
-        isPausedForUpgrade = false
-        isPaused = false
-        isTutorialActive = false
-        isAimingCoupon = false
+        resetGameState()
         moveVector = .zero
+        screen = .levelSelect
     }
 
     func startStore(_ store: StoreLevel) {
@@ -267,7 +255,11 @@ final class GameSession: ObservableObject {
         isTutorialActive = false
         outcome = won ? .won : .lost
         AudioManager.shared.playSFX(won ? .win : .lose)
-        if won { unlockNextIfNeeded(clearedStoreId: storeId) }
+        if won {
+            unlockNextIfNeeded(clearedStoreId: storeId)
+            GameCenterManager.shared.submitWinScore(budget: budget, storeId: storeId)
+            GameCenterManager.shared.evaluateAchievements(budget: budget, playerLevel: playerLevel, storeId: storeId)
+        }
     }
 
     func showToast(_ text: String) {

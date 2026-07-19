@@ -1,3 +1,4 @@
+import GameController
 import SpriteKit
 import SwiftUI
 
@@ -36,7 +37,7 @@ final class StoreHubScene: SKScene {
         let hint = SKLabelNode(fontNamed: "Menlo-Bold")
         hint.fontSize = 12
         hint.fontColor = SKColor(white: 1, alpha: 0.7)
-        hint.position = CGPoint(x: 0, y: size.height / 2 - 28)
+        hint.position = CGPoint(x: 0, y: size.height / 2 - 100)
         hint.zPosition = 100
         hintLabel = hint
         cameraNode.addChild(hint)
@@ -203,6 +204,9 @@ final class StoreHubScene: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         guard let session else { return }
+        if GameControllerManager.shared.isConnected {
+            GameControllerManager.shared.pollMovement(into: session)
+        }
         let dt: TimeInterval = 1.0 / 60.0
         enterCooldown = max(0, enterCooldown - dt)
 

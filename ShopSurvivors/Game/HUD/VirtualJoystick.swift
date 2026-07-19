@@ -25,9 +25,15 @@ struct VirtualJoystick: View {
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
                     let maxR = size * 0.32
+                    let deadzone: CGFloat = 6
                     var dx = value.translation.width
                     var dy = value.translation.height
                     let len = hypot(dx, dy)
+                    guard len >= deadzone else {
+                        dragOffset = .zero
+                        vector = .zero
+                        return
+                    }
                     if len > maxR {
                         dx = dx / len * maxR
                         dy = dy / len * maxR

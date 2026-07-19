@@ -3,6 +3,8 @@ import SpriteKit
 
 struct MallHubView: View {
     @ObservedObject var session: GameSession
+    @ObservedObject private var gc = GameCenterManager.shared
+    @ObservedObject private var controllerManager = GameControllerManager.shared
     @State private var scene: StoreHubScene
     @State private var joystickVector: CGVector = .zero
 
@@ -47,16 +49,31 @@ struct MallHubView: View {
 
                     Spacer()
 
-                    Button {
-                        AudioManager.shared.playSFX(.ui)
-                        session.goSettings()
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 36, height: 36)
-                            .background(Color.black.opacity(0.45))
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    HStack(spacing: 8) {
+                        if gc.isAuthenticated {
+                            Button {
+                                AudioManager.shared.playSFX(.ui)
+                                GameCenterManager.shared.showDashboard()
+                            } label: {
+                                Image(systemName: "trophy.fill")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 36, height: 36)
+                                    .background(Color.black.opacity(0.45))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            }
+                        }
+                        Button {
+                            AudioManager.shared.playSFX(.ui)
+                            session.goSettings()
+                        } label: {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Color.black.opacity(0.45))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -65,9 +82,11 @@ struct MallHubView: View {
                 Spacer()
 
                 HStack(alignment: .bottom) {
-                    VirtualJoystick(vector: $joystickVector)
-                        .padding(.leading, 28)
-                        .padding(.bottom, 16)
+                    if !controllerManager.isConnected {
+                        VirtualJoystick(vector: $joystickVector)
+                            .padding(.leading, 28)
+                            .padding(.bottom, 16)
+                    }
                     Spacer()
                     Text("Walk into a door to shop")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))

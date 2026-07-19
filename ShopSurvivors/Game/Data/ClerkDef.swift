@@ -9,82 +9,35 @@ enum ClerkType: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var displayName: String {
-        switch self {
-        case .pitcher: "Pitcher"
-        case .closer: "Closer"
-        case .sprinter: "Sprinter"
-        case .upseller: "Upseller"
-        }
+    private struct Stats {
+        let displayName: String
+        let spriteName: String
+        let moveSpeed: CGFloat
+        let maxHP: CGFloat
+        /// Budget drained per second while in pitch range of companion.
+        let drainPerSecond: CGFloat
+        let pitchRadius: CGFloat
+        let xpReward: Int
+        let pitchLines: [String]
     }
 
-    var spriteName: String {
-        switch self {
-        case .pitcher: "clerk_pitcher"
-        case .closer: "clerk_closer"
-        case .sprinter: "clerk_sprinter"
-        case .upseller: "clerk_upseller"
-        }
-    }
+    private static let table: [ClerkType: Stats] = [
+        .pitcher:  Stats(displayName: "Pitcher",  spriteName: "clerk_pitcher",  moveSpeed: 70,  maxHP: 30, drainPerSecond: 4,   pitchRadius: 48, xpReward: 3, pitchLines: ["50% off!", "Limited time!", "Just looking?"]),
+        .closer:   Stats(displayName: "Closer",   spriteName: "clerk_closer",   moveSpeed: 45,  maxHP: 55, drainPerSecond: 9,   pitchRadius: 42, xpReward: 6, pitchLines: ["Extended warranty!", "Last one!", "Sign here!"]),
+        .sprinter: Stats(displayName: "Sprinter", spriteName: "clerk_sprinter", moveSpeed: 110, maxHP: 18, drainPerSecond: 2.5, pitchRadius: 40, xpReward: 2, pitchLines: ["Excuse me!", "Flash sale!", "Wait!"]),
+        .upseller: Stats(displayName: "Upseller", spriteName: "clerk_upseller", moveSpeed: 60,  maxHP: 40, drainPerSecond: 5,   pitchRadius: 55, xpReward: 5, pitchLines: ["Bundle deal!", "Buy 2 get 1!", "Members save more!"]),
+    ]
 
-    var moveSpeed: CGFloat {
-        switch self {
-        case .pitcher: 70
-        case .closer: 45
-        case .sprinter: 110
-        case .upseller: 60
-        }
-    }
+    private var stats: Stats { Self.table[self]! }
 
-    var maxHP: CGFloat {
-        switch self {
-        case .pitcher: 30
-        case .closer: 55
-        case .sprinter: 18
-        case .upseller: 40
-        }
-    }
-
-    /// Budget drained per second while in pitch range of companion.
-    var drainPerSecond: CGFloat {
-        switch self {
-        case .pitcher: 4
-        case .closer: 9
-        case .sprinter: 2.5
-        case .upseller: 5
-        }
-    }
-
-    var pitchRadius: CGFloat {
-        switch self {
-        case .pitcher: 48
-        case .closer: 42
-        case .sprinter: 40
-        case .upseller: 55
-        }
-    }
-
-    var xpReward: Int {
-        switch self {
-        case .pitcher: 3
-        case .closer: 6
-        case .sprinter: 2
-        case .upseller: 5
-        }
-    }
-
-    var pitchLines: [String] {
-        switch self {
-        case .pitcher:
-            ["50% off!", "Limited time!", "Just looking?"]
-        case .closer:
-            ["Extended warranty!", "Last one!", "Sign here!"]
-        case .sprinter:
-            ["Excuse me!", "Flash sale!", "Wait!"]
-        case .upseller:
-            ["Bundle deal!", "Buy 2 get 1!", "Members save more!"]
-        }
-    }
+    var displayName: String { stats.displayName }
+    var spriteName: String { stats.spriteName }
+    var moveSpeed: CGFloat { stats.moveSpeed }
+    var maxHP: CGFloat { stats.maxHP }
+    var drainPerSecond: CGFloat { stats.drainPerSecond }
+    var pitchRadius: CGFloat { stats.pitchRadius }
+    var xpReward: Int { stats.xpReward }
+    var pitchLines: [String] { stats.pitchLines }
 
     /// Extra drain multiplier when another clerk is nearby (upseller only).
     var packBonus: CGFloat {

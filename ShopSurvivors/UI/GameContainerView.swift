@@ -3,6 +3,7 @@ import SpriteKit
 
 struct GameContainerView: View {
     @ObservedObject var session: GameSession
+    @ObservedObject private var controllerManager = GameControllerManager.shared
     let store: StoreLevel
 
     @State private var scene: GameScene
@@ -199,10 +200,12 @@ struct GameContainerView: View {
 
     private func bottomHUD(geo: GeometryProxy) -> some View {
         HStack(alignment: .bottom) {
-            VirtualJoystick(vector: $joystickVector)
-                .padding(.leading, 8)
-                .opacity(session.isPaused || session.isTutorialActive ? 0.3 : 1)
-                .disabled(session.isPaused || session.isPausedForUpgrade || session.isTutorialActive)
+            if !controllerManager.isConnected {
+                VirtualJoystick(vector: $joystickVector)
+                    .padding(.leading, 8)
+                    .opacity(session.isPaused || session.isTutorialActive ? 0.3 : 1)
+                    .disabled(session.isPaused || session.isPausedForUpgrade || session.isTutorialActive)
+            }
 
             Spacer()
 

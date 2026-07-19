@@ -1,3 +1,4 @@
+import GameController
 import SpriteKit
 import SwiftUI
 
@@ -30,6 +31,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var aimGhost: SKNode?
     private var arenaSize = CGSize(width: 1400, height: 900)
     private var shoveSFXCooldown: TimeInterval = 0
+    private var controllerConnectObserver: NSObjectProtocol?
 
     func configure(session: GameSession, store: StoreLevel) {
         self.session = session
@@ -51,6 +53,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         camera = cameraNode
         addChild(cameraNode)
         cameraNode.position = player.position
+
+        setupControllerHandlers()
+        controllerConnectObserver = NotificationCenter.default.addObserver(
+            forName: .GCControllerDidConnect, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.setupControllerHandlers() }
+        }
     }
 
     private func buildArena() {
@@ -171,6 +180,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     override func update(_ currentTime: TimeInterval) {
         guard let session, session.outcome == nil else { return }
+        if GameControllerManager.shared.isConnected {
+            GameControllerManager.shared.pollMovement(into: session)
+        }
         if session.isGameplayFrozen {
             syncAimGhost(session: session)
             return
@@ -285,6 +297,40 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
         AudioManager.shared.playSFX(.coupon)
+    }
+
+    // MARK: - Controller Support
+
+    private func setupControllerHandlers() {
+        guard session != nil,
+              let pad = GCController.controllers().first?.extendedGamepad else { return }
+
+        // A / Cross → deploy a coupon lure ahead of the player
+        pad.buttonA.pressedChangedHandler = { [weak self] _, _, pressed in
+            guard pressed else { return }
+            Task { @MainActor [weak self] in
+                guard let self, let session = self.session else { return }
+                guard session.couponCooldown <= 0,
+                      session.outcome == nil,
+                      !session.isPausedForUpgrade,
+                      !session.isPaused,
+                      !session.isTutorialActive else { return }
+                let forward = self.player.facing
+                let point = CGPoint(
+                    x: self.player.position.x + forward.dx * 80,
+                    y: self.player.position.y + forward.dy * 80
+                )
+                self.deployCoupon(at: self.clampPoint(point), session: session)
+            }
+        }
+
+        // Menu / Options → toggle pause
+        pad.buttonMenu.pressedChangedHandler = { [weak self] _, _, pressed in
+            guard pressed else { return }
+            Task { @MainActor [weak self] in
+                self?.session?.togglePause()
+            }
+        }
     }
 
     // MARK: - Systems
