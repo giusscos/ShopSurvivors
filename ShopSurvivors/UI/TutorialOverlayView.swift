@@ -8,7 +8,9 @@ struct TutorialOverlayView: View {
         ("Move", "Use the left joystick to walk around the store."),
         ("Protect FRIEND", "Clerks path to your friend and drain budget when they get close."),
         ("Shove clerks", "Walk into clerks to knock them away from your friend."),
-        ("Drop a LURE", "Hold LURE, drag onto the floor, and release to distract clerks.")
+        ("Drop a LURE", "Hold LURE, drag onto the floor, and release to distract clerks."),
+        ("XP & upgrades", "Defeat clerks, pick up cyan XP gems, then choose an upgrade."),
+        ("Win the run", "Survive until the timer hits 0:00 with budget left.")
     ]
 
     var body: some View {

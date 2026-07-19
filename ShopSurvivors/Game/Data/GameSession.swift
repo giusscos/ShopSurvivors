@@ -20,10 +20,12 @@ enum RunOutcome: Equatable {
 final class GameSession: ObservableObject {
     @Published var screen: AppScreen
     @Published var unlockedStoreIndex: Int = 0
+    @Published var mallCleared: Bool = false
 
     @Published var budget: CGFloat = 100
     @Published var startingBudget: CGFloat = 100
     @Published var timeRemaining: TimeInterval = 120
+    @Published var runElapsed: TimeInterval = 0
     @Published var xp: Int = 0
     @Published var xpToNext: Int = 12
     @Published var playerLevel: Int = 1
@@ -42,6 +44,9 @@ final class GameSession: ObservableObject {
     @Published var lastDrainFlash: Bool = false
     @Published var runID: UUID = UUID()
     @Published var pickupToast: String = ""
+    @Published var luresDeployed: Int = 0
+    /// Bumps when local bests change so hub UI refreshes.
+    @Published var bestScoresRevision: Int = 0
 
     /// Joystick input written by SwiftUI, read by SpriteKit each frame.
     var moveVector: CGVector = .zero
@@ -51,13 +56,21 @@ final class GameSession: ObservableObject {
     var couponAimWorld: CGPoint?
     var couponDeployRequested: Bool = false
 
+    private var upgradeQueue: [[UpgradeOffer]] = []
+    private var settingsReturn: AppScreen = .title
+    private var howToPlayReturn: AppScreen = .title
+
     private let unlockedKey = "unlockedStoreIndex"
+    private let mallClearedKey = "mallCleared"
     private let tutorialKey = "hasCompletedTutorial"
     private let introKey = "hasSeenLoreIntro"
+    private let bestBudgetPrefix = "bestBudget_"
+    private let bestEndlessKey = "bestEndlessSeconds"
     private var toastClearTask: Task<Void, Never>?
 
     init() {
         unlockedStoreIndex = UserDefaults.standard.integer(forKey: unlockedKey)
+        mallCleared = UserDefaults.standard.bool(forKey: mallClearedKey)
         let seenIntro = UserDefaults.standard.bool(forKey: introKey)
         screen = seenIntro ? .title : .intro
     }
@@ -76,12 +89,19 @@ final class GameSession: ObservableObject {
         isPaused || isPausedForUpgrade || isTutorialActive || outcome != nil
     }
 
+    var currentStore: StoreLevel? {
+        if case .playing(let id) = screen { return StoreLevel.byId(id) }
+        return nil
+    }
+
     private func resetGameState() {
         outcome = nil
         isPausedForUpgrade = false
         isPaused = false
         isTutorialActive = false
         isAimingCoupon = false
+        upgradeQueue = []
+        upgradeOffers = []
     }
 
     func goTitle() {
@@ -102,13 +122,31 @@ final class GameSession: ObservableObject {
     }
 
     func goHowToPlay() {
+        howToPlayReturn = (screen == .settings) ? .settings : .title
         resetGameState()
         screen = .howToPlay
     }
 
+    func leaveHowToPlay() {
+        if howToPlayReturn == .settings {
+            screen = .settings
+        } else {
+            goTitle()
+        }
+    }
+
     func goSettings() {
+        settingsReturn = (screen == .levelSelect) ? .levelSelect : .title
         resetGameState()
         screen = .settings
+    }
+
+    func leaveSettings() {
+        if settingsReturn == .levelSelect {
+            goLevelSelect()
+        } else {
+            goTitle()
+        }
     }
 
     func goLevelSelect() {
@@ -120,7 +158,8 @@ final class GameSession: ObservableObject {
     func startStore(_ store: StoreLevel) {
         budget = store.startingBudget
         startingBudget = store.startingBudget
-        timeRemaining = store.duration
+        timeRemaining = store.isEndless ? 0 : store.duration
+        runElapsed = 0
         xp = 0
         xpToNext = 12
         playerLevel = 1
@@ -130,17 +169,19 @@ final class GameSession: ObservableObject {
         isPaused = false
         isAimingCoupon = false
         upgradeOffers = []
+        upgradeQueue = []
         outcome = nil
         weapons = [OwnedWeapon(kind: store.startingWeapon, level: 1)]
         moveSpeedMultiplier = 1
         willpowerMultiplier = 1
         pitchBanner = ""
         pickupToast = ""
+        luresDeployed = 0
         moveVector = .zero
         couponAimWorld = nil
         couponDeployRequested = false
         runID = UUID()
-        isTutorialActive = !hasCompletedTutorial
+        isTutorialActive = !hasCompletedTutorial && !store.isEndless
         screen = .playing(storeId: store.id)
         AudioManager.shared.playMusic()
     }
@@ -160,7 +201,9 @@ final class GameSession: ObservableObject {
 
     func resetUnlocks() {
         unlockedStoreIndex = 0
+        mallCleared = false
         UserDefaults.standard.set(0, forKey: unlockedKey)
+        UserDefaults.standard.set(false, forKey: mallClearedKey)
     }
 
     func togglePause() {
@@ -171,11 +214,20 @@ final class GameSession: ObservableObject {
             couponAimWorld = nil
             couponDeployRequested = false
         }
-        // Keep music playing during pause — only the Music toggle mutes it.
     }
 
     func resume() {
         isPaused = false
+    }
+
+    /// Called when the app resigns active mid-run.
+    func pauseForBackground() {
+        guard case .playing = screen else { return }
+        guard outcome == nil, !isPausedForUpgrade, !isTutorialActive else { return }
+        isPaused = true
+        isAimingCoupon = false
+        couponAimWorld = nil
+        couponDeployRequested = false
     }
 
     func unlockNextIfNeeded(clearedStoreId: String) {
@@ -187,6 +239,8 @@ final class GameSession: ObservableObject {
         } else if next >= StoreLevel.all.count {
             unlockedStoreIndex = max(unlockedStoreIndex, StoreLevel.all.count - 1)
             UserDefaults.standard.set(unlockedStoreIndex, forKey: unlockedKey)
+            mallCleared = true
+            UserDefaults.standard.set(true, forKey: mallClearedKey)
         }
     }
 
@@ -211,11 +265,20 @@ final class GameSession: ObservableObject {
         couponDeployRequested = true
     }
 
+    func noteLureDeployed() {
+        luresDeployed += 1
+    }
+
     func presentUpgrades(_ offers: [UpgradeOffer]) {
         isAimingCoupon = false
+        if isPausedForUpgrade {
+            upgradeQueue.append(offers)
+            return
+        }
         upgradeOffers = offers
         isPausedForUpgrade = true
         AudioManager.shared.playSFX(.levelup)
+        Haptics.levelUp()
     }
 
     func applyUpgrade(_ offer: UpgradeOffer) {
@@ -243,9 +306,19 @@ final class GameSession: ObservableObject {
             budget = min(startingBudget, budget + startingBudget * 0.12)
             showToast("Budget topped up")
         }
-        isPausedForUpgrade = false
-        upgradeOffers = []
         AudioManager.shared.playSFX(.ui)
+        Haptics.ui()
+
+        if let next = upgradeQueue.first {
+            upgradeQueue.removeFirst()
+            upgradeOffers = next
+            isPausedForUpgrade = true
+            AudioManager.shared.playSFX(.levelup)
+            Haptics.levelUp()
+        } else {
+            isPausedForUpgrade = false
+            upgradeOffers = []
+        }
     }
 
     func endRun(won: Bool, storeId: String) {
@@ -253,13 +326,80 @@ final class GameSession: ObservableObject {
         isAimingCoupon = false
         isPaused = false
         isTutorialActive = false
+        upgradeQueue = []
         outcome = won ? .won : .lost
         AudioManager.shared.playSFX(won ? .win : .lose)
         if won {
-            unlockNextIfNeeded(clearedStoreId: storeId)
-            GameCenterManager.shared.submitWinScore(budget: budget, storeId: storeId)
-            GameCenterManager.shared.evaluateAchievements(budget: budget, playerLevel: playerLevel, storeId: storeId)
+            Haptics.win()
+        } else {
+            Haptics.lose()
         }
+
+        let store = StoreLevel.byId(storeId)
+        if store?.isEndless == true {
+            recordEndlessBest(seconds: runElapsed)
+            GameCenterManager.shared.submitEndlessScore(seconds: runElapsed)
+            GameCenterManager.shared.evaluateEndlessAchievements(
+                seconds: runElapsed,
+                luresDeployed: luresDeployed,
+                playerLevel: playerLevel
+            )
+        } else if won {
+            unlockNextIfNeeded(clearedStoreId: storeId)
+            recordBestBudget(budget, storeId: storeId)
+            GameCenterManager.shared.submitWinScore(budget: budget, storeId: storeId)
+            GameCenterManager.shared.evaluateAchievements(
+                budget: budget,
+                playerLevel: playerLevel,
+                storeId: storeId,
+                luresDeployed: luresDeployed
+            )
+        }
+    }
+
+    // MARK: - Local bests
+
+    func bestBudget(for storeId: String) -> CGFloat {
+        CGFloat(UserDefaults.standard.double(forKey: bestBudgetPrefix + storeId))
+    }
+
+    func bestEndlessSeconds() -> TimeInterval {
+        UserDefaults.standard.double(forKey: bestEndlessKey)
+    }
+
+    private func recordBestBudget(_ value: CGFloat, storeId: String) {
+        let key = bestBudgetPrefix + storeId
+        let previous = UserDefaults.standard.double(forKey: key)
+        if Double(value) > previous {
+            UserDefaults.standard.set(Double(value), forKey: key)
+            bestScoresRevision += 1
+        }
+    }
+
+    private func recordEndlessBest(seconds: TimeInterval) {
+        let previous = UserDefaults.standard.double(forKey: bestEndlessKey)
+        if seconds > previous {
+            UserDefaults.standard.set(seconds, forKey: bestEndlessKey)
+            bestScoresRevision += 1
+        }
+    }
+
+    func formattedBest(for store: StoreLevel) -> String? {
+        if store.isEndless {
+            let best = bestEndlessSeconds()
+            guard best > 0 else { return nil }
+            return "Best \(formatClock(best))"
+        }
+        let best = bestBudget(for: store.id)
+        guard best > 0 else { return nil }
+        return String(format: "Best $%.2f", Double(best))
+    }
+
+    func formatClock(_ t: TimeInterval) -> String {
+        let total = Int(t)
+        let m = total / 60
+        let s = total % 60
+        return String(format: "%d:%02d", m, s)
     }
 
     func showToast(_ text: String) {

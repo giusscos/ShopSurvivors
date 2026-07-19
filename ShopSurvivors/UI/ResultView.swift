@@ -12,60 +12,77 @@ struct ResultView: View {
         return StoreLevel.all[idx + 1]
     }
 
+    private var unlocksEndless: Bool {
+        session.outcome == .won && store.id == StoreLevel.all.last?.id
+    }
+
     var body: some View {
         ZStack {
             Color.black.opacity(0.6)
                 .ignoresSafeArea()
 
             VStack(spacing: 14) {
-                Text(session.outcome == .won ? "BUDGET SURVIVED" : "WALLET WIPED")
+                Text(resultTitle)
                     .font(.system(size: 28, weight: .black, design: .rounded))
-                    .foregroundStyle(session.outcome == .won
-                        ? Color(red: 0.35, green: 0.9, blue: 0.55)
-                        : Color(red: 1.0, green: 0.4, blue: 0.35))
+                    .foregroundStyle(titleColor)
 
-                Text(session.outcome == .won
-                     ? "You escaped \(store.name) with $\(Int(session.budget)) left."
-                     : "The clerks closed the deal. Try again!")
+                Text(resultBody)
                     .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.75))
                     .multilineTextAlignment(.center)
 
+                if let best = session.formattedBest(for: store) {
+                    Text(best)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.2, green: 0.85, blue: 0.9))
+                }
+
                 if session.outcome == .won {
-                    if let next = nextStore {
+                    if unlocksEndless {
+                        Text("Unlocked: Midnight Mall (Endless)")
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.4))
+                    } else if let next = nextStore {
                         Text("Unlocked: \(next.name)")
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.4))
-                    } else {
+                    } else if !store.isEndless {
                         Text("All stores cleared — mall master!")
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.4))
                     }
-                } else {
+                } else if !store.isEndless {
                     Text("Tip: survive until the timer hits 0:00 with budget left.")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.55))
                         .multilineTextAlignment(.center)
                 }
 
-                if session.outcome == .won, gc.isAuthenticated {
-                    Button {
-                        AudioManager.shared.playSFX(.ui)
-                        GameCenterManager.shared.showLeaderboard(storeId: store.id)
-                    } label: {
-                        Label("Leaderboard", systemImage: "trophy.fill")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Color(red: 0.22, green: 0.55, blue: 0.95).opacity(0.85))
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
+                Button {
+                    AudioManager.shared.playSFX(.ui)
+                    Haptics.ui()
+                    _ = GameCenterManager.shared.showLeaderboard(storeId: store.id)
+                } label: {
+                    Label(gc.isAuthenticated ? "Leaderboard" : "Sign in for Leaderboard", systemImage: "trophy.fill")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color(red: 0.22, green: 0.55, blue: 0.95).opacity(0.85))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+
+                if let msg = gc.statusMessage, !gc.isAuthenticated {
+                    Text(msg)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .multilineTextAlignment(.center)
                 }
 
                 HStack(spacing: 12) {
                     Button {
                         AudioManager.shared.playSFX(.ui)
+                        Haptics.ui()
                         session.startStore(store)
                     } label: {
                         resultButton("Retry", filled: false)
@@ -74,17 +91,27 @@ struct ResultView: View {
                     if let next = nextStore {
                         Button {
                             AudioManager.shared.playSFX(.ui)
+                            Haptics.ui()
                             session.startStore(next)
                         } label: {
                             resultButton("Next Store", filled: true)
+                        }
+                    } else if unlocksEndless {
+                        Button {
+                            AudioManager.shared.playSFX(.ui)
+                            Haptics.ui()
+                            session.startStore(StoreLevel.endless)
+                        } label: {
+                            resultButton("Endless", filled: true)
                         }
                     }
 
                     Button {
                         AudioManager.shared.playSFX(.ui)
+                        Haptics.ui()
                         session.goLevelSelect()
                     } label: {
-                        resultButton("Stores", filled: session.outcome != .won || nextStore == nil)
+                        resultButton("Stores", filled: session.outcome != .won || (nextStore == nil && !unlocksEndless))
                     }
                 }
             }
@@ -94,6 +121,32 @@ struct ResultView: View {
                     .fill(Color(red: 0.1, green: 0.16, blue: 0.2))
             )
         }
+    }
+
+    private var resultTitle: String {
+        if store.isEndless {
+            return "RUN OVER"
+        }
+        return session.outcome == .won ? "BUDGET SURVIVED" : "WALLET WIPED"
+    }
+
+    private var titleColor: Color {
+        if store.isEndless {
+            return Color(red: 0.75, green: 0.45, blue: 0.95)
+        }
+        return session.outcome == .won
+            ? Color(red: 0.35, green: 0.9, blue: 0.55)
+            : Color(red: 1.0, green: 0.4, blue: 0.35)
+    }
+
+    private var resultBody: String {
+        if store.isEndless {
+            return "You lasted \(session.formatClock(session.runElapsed)) in Midnight Mall."
+        }
+        if session.outcome == .won {
+            return String(format: "You escaped \(store.name) with $%.2f left.", Double(session.budget))
+        }
+        return "The clerks closed the deal. Try again!"
     }
 
     private func resultButton(_ title: String, filled: Bool) -> some View {

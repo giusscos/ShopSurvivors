@@ -112,7 +112,9 @@ struct GameContainerView: View {
                             .background(Color.black.opacity(0.45))
                             .clipShape(Capsule())
                     }
-                    Text("Protect FRIEND · shove clerks")
+                    Text(store.isEndless
+                         ? "Endless · last as long as you can"
+                         : "Protect FRIEND · shove clerks")
                         .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.55))
                 }
@@ -143,10 +145,10 @@ struct GameContainerView: View {
     private var budgetBar: some View {
         let pct = max(0, session.budget / max(1, session.startingBudget))
         return HStack(spacing: 8) {
-            Text("$\(Int(session.budget))")
+            Text("$\(String(format: "%.2f", Double(session.budget)))")
                 .font(.system(size: 16, weight: .black, design: .rounded))
                 .foregroundStyle(pct < 0.25 ? Color.red : Color(red: 0.35, green: 0.9, blue: 0.55))
-                .frame(minWidth: 52, alignment: .leading)
+                .frame(minWidth: 64, alignment: .leading)
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -167,9 +169,13 @@ struct GameContainerView: View {
     }
 
     private var timerBadge: some View {
-        Text(formatTime(session.timeRemaining))
+        Text(store.isEndless
+             ? session.formatClock(session.runElapsed)
+             : formatTime(session.timeRemaining))
             .font(.system(size: 16, weight: .bold, design: .monospaced))
-            .foregroundStyle(.white)
+            .foregroundStyle(store.isEndless
+                             ? Color(red: 0.75, green: 0.45, blue: 0.95)
+                             : .white)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(Color.black.opacity(0.35))

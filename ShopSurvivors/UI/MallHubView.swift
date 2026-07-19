@@ -20,12 +20,13 @@ struct MallHubView: View {
         ZStack {
             SpriteView(scene: scene, preferredFramesPerSecond: 120, options: [.allowsTransparency])
                 .ignoresSafeArea()
-                .id(session.unlockedStoreIndex)
+                .id("\(session.unlockedStoreIndex)-\(session.mallCleared)-\(session.bestScoresRevision)")
 
             VStack {
                 HStack {
                     Button {
                         AudioManager.shared.playSFX(.ui)
+                        Haptics.ui()
                         session.goTitle()
                     } label: {
                         Label("Back", systemImage: "chevron.left")
@@ -50,21 +51,21 @@ struct MallHubView: View {
                     Spacer()
 
                     HStack(spacing: 8) {
-                        if gc.isAuthenticated {
-                            Button {
-                                AudioManager.shared.playSFX(.ui)
-                                GameCenterManager.shared.showDashboard()
-                            } label: {
-                                Image(systemName: "trophy.fill")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 36, height: 36)
-                                    .background(Color.black.opacity(0.45))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            }
+                        Button {
+                            AudioManager.shared.playSFX(.ui)
+                            Haptics.ui()
+                            _ = GameCenterManager.shared.showDashboard()
+                        } label: {
+                            Image(systemName: gc.isAuthenticated ? "trophy.fill" : "trophy")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Color.black.opacity(0.45))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         Button {
                             AudioManager.shared.playSFX(.ui)
+                            Haptics.ui()
                             session.goSettings()
                         } label: {
                             Image(systemName: "gearshape.fill")
@@ -79,6 +80,16 @@ struct MallHubView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
 
+                if let msg = gc.statusMessage, !gc.isAuthenticated {
+                    Text(msg)
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.65))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.45))
+                        .clipShape(Capsule())
+                }
+
                 Spacer()
 
                 HStack(alignment: .bottom) {
@@ -88,7 +99,9 @@ struct MallHubView: View {
                             .padding(.bottom, 16)
                     }
                     Spacer()
-                    Text("Walk into a door to shop")
+                    Text(session.mallCleared
+                         ? "Walk into a door — Midnight Mall is open"
+                         : "Walk into a door to shop")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.55))
                         .padding(.trailing, 24)
@@ -108,11 +121,20 @@ struct MallHubView: View {
             session.moveVector = joystickVector
         }
         .onChange(of: session.unlockedStoreIndex) { _, _ in
-            // Rebuild hub so newly unlocked doors open.
-            let s = StoreHubScene(size: CGSize(width: 844, height: 390))
-            s.scaleMode = .resizeFill
-            s.configure(session: session)
-            scene = s
+            rebuildScene()
         }
+        .onChange(of: session.mallCleared) { _, _ in
+            rebuildScene()
+        }
+        .onChange(of: session.bestScoresRevision) { _, _ in
+            rebuildScene()
+        }
+    }
+
+    private func rebuildScene() {
+        let s = StoreHubScene(size: CGSize(width: 844, height: 390))
+        s.scaleMode = .resizeFill
+        s.configure(session: session)
+        scene = s
     }
 }

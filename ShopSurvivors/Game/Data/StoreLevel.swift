@@ -5,6 +5,7 @@ struct StoreLevel: Identifiable, Equatable {
     let id: String
     let name: String
     let subtitle: String
+    /// Campaign duration in seconds. `0` means endless (no timed win).
     let duration: TimeInterval
     let startingBudget: CGFloat
     let floorColor: Color
@@ -15,10 +16,26 @@ struct StoreLevel: Identifiable, Equatable {
     let spawnIntervalStart: TimeInterval
     let spawnIntervalEnd: TimeInterval
     let maxClerks: Int
+    /// Shelf count hint for arena variety.
+    let shelfCount: Int
+    var isEndless: Bool { duration <= 0 }
+
+    /// Progress used for spawn ramp. Endless uses a soft cap so difficulty keeps climbing.
+    func difficultyProgress(elapsed: TimeInterval) -> CGFloat {
+        if isEndless {
+            return min(1.25, CGFloat(elapsed / 180))
+        }
+        return min(1, CGFloat(elapsed / max(1, duration)))
+    }
 
     func spawnInterval(at elapsed: TimeInterval) -> TimeInterval {
-        let t = min(1, elapsed / duration)
-        return spawnIntervalStart + (spawnIntervalEnd - spawnIntervalStart) * t
+        let t = Double(min(1, difficultyProgress(elapsed: elapsed)))
+        let interval = spawnIntervalStart + (spawnIntervalEnd - spawnIntervalStart) * t
+        if isEndless, elapsed > 180 {
+            let extra = min(0.2, (elapsed - 180) / 600)
+            return max(0.28, interval - extra)
+        }
+        return interval
     }
 
     func weightedClerk() -> ClerkType {
@@ -49,7 +66,8 @@ struct StoreLevel: Identifiable, Equatable {
             startingWeapon: .priceTags,
             spawnIntervalStart: 1.6,
             spawnIntervalEnd: 0.55,
-            maxClerks: 40
+            maxClerks: 40,
+            shelfCount: 12
         ),
         StoreLevel(
             id: "fashion",
@@ -68,7 +86,8 @@ struct StoreLevel: Identifiable, Equatable {
             startingWeapon: .receipts,
             spawnIntervalStart: 1.5,
             spawnIntervalEnd: 0.5,
-            maxClerks: 45
+            maxClerks: 45,
+            shelfCount: 16
         ),
         StoreLevel(
             id: "grocery",
@@ -87,11 +106,40 @@ struct StoreLevel: Identifiable, Equatable {
             startingWeapon: .shoppingBag,
             spawnIntervalStart: 1.4,
             spawnIntervalEnd: 0.45,
-            maxClerks: 50
+            maxClerks: 50,
+            shelfCount: 20
         )
     ]
 
+    /// Survive until the wallet is wiped. Score = seconds lasted.
+    static let endless = StoreLevel(
+        id: "endless",
+        name: "Midnight Mall",
+        subtitle: "No closing time — last as long as you can",
+        duration: 0,
+        startingBudget: 100,
+        floorColor: Color(red: 0.1, green: 0.08, blue: 0.18),
+        accentColor: Color(red: 0.75, green: 0.45, blue: 0.95),
+        clerkWeights: [
+            .pitcher: 0.25,
+            .closer: 0.25,
+            .sprinter: 0.25,
+            .upseller: 0.25
+        ],
+        startingWeapon: .priceTags,
+        spawnIntervalStart: 1.35,
+        spawnIntervalEnd: 0.4,
+        maxClerks: 60,
+        shelfCount: 18
+    )
+
     static func byId(_ id: String) -> StoreLevel? {
-        all.first { $0.id == id }
+        if id == endless.id { return endless }
+        return all.first { $0.id == id }
+    }
+
+    /// Campaign stores plus Endless once the mall is cleared.
+    static func hubStores(mallCleared: Bool) -> [StoreLevel] {
+        mallCleared ? all + [endless] : all
     }
 }

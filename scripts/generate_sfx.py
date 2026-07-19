@@ -133,6 +133,12 @@ def main() -> None:
         volume=0.38,
     )
 
+    # Per-weapon fire cues
+    write_wav("sfx_aura", mix(square(880, 0.04, decay=22), square(1100, 0.05, decay=18)), volume=0.28)
+    write_wav("sfx_receipt", concat(noise_burst(0.03, decay=50), chirp(700, 420, 0.07, decay=12)), volume=0.38)
+    write_wav("sfx_laser", chirp(900, 1400, 0.09, decay=8), volume=0.35)
+    write_wav("sfx_bag", mix(noise_burst(0.06, decay=20), square(120, 0.08, decay=14)), volume=0.42)
+
 
 if __name__ == "__main__":
     main()

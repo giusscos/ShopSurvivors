@@ -4,94 +4,124 @@ struct TitleView: View {
     @ObservedObject var session: GameSession
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.08, green: 0.18, blue: 0.24),
-                    Color(red: 0.12, green: 0.28, blue: 0.32),
-                    Color(red: 0.2, green: 0.22, blue: 0.15)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+        GeometryReader { geo in
+            let insetL = max(geo.safeAreaInsets.leading, 12) + 8
+            let insetR = max(geo.safeAreaInsets.trailing, 12) + 8
+            let safeTop = max(geo.safeAreaInsets.top, 6)
+            let safeBottom = max(geo.safeAreaInsets.bottom, 10)
 
-            GeometryReader { geo in
-                ForEach(0..<8, id: \.self) { i in
-                    Rectangle()
-                        .fill(Color.white.opacity(i % 2 == 0 ? 0.03 : 0.015))
-                        .frame(width: geo.size.width / 8)
-                        .offset(x: CGFloat(i) * geo.size.width / 8)
+            ZStack {
+                // Background must be sized to the viewport — scaledToFill
+                // without a fixed frame expands the ZStack and clips UI.
+                Image("title_splash")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+                    .overlay {
+                        LinearGradient(
+                            colors: [
+                                Color.black.opacity(0.55),
+                                Color.black.opacity(0.08),
+                                Color.black.opacity(0.08),
+                                Color.black.opacity(0.72)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+                    .ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    topBar
+                        .padding(.top, safeTop)
+                        .padding(.leading, insetL)
+                        .padding(.trailing, insetR)
+
+                    titleBlock
+                        .padding(.top, 8)
+
+                    Spacer(minLength: 24)
+
+                    bottomBlock
+                        .padding(.leading, insetL)
+                        .padding(.trailing, insetR)
+                        .padding(.bottom, safeBottom)
                 }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
             }
-            .ignoresSafeArea()
+        }
+        .ignoresSafeArea()
+    }
 
-            VStack(spacing: 0) {
-                HStack {
-                    Spacer()
-                    Button {
-                        AudioManager.shared.playSFX(.ui)
-                        session.goHowToPlay()
-                    } label: {
-                        Text("How to Play")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(Color.white.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-                    Button {
-                        AudioManager.shared.playSFX(.ui)
-                        session.goSettings()
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 40, height: 40)
-                            .background(Color.white.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 12)
+    private var topBar: some View {
+        HStack(spacing: 10) {
+            Spacer(minLength: 0)
+            Button {
+                AudioManager.shared.playSFX(.ui)
+                Haptics.ui()
+                session.goHowToPlay()
+            } label: {
+                Text("How to Play")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.45))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            Button {
+                AudioManager.shared.playSFX(.ui)
+                Haptics.ui()
+                session.goSettings()
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Color.black.opacity(0.45))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+    }
 
-                Spacer(minLength: 0)
+    private var titleBlock: some View {
+        ArcedTitleText(
+            segments: [
+                ("SHOP ", Color(red: 0.2, green: 0.85, blue: 0.9)),
+                ("SURVIVORS", Color(red: 1.0, green: 0.55, blue: 0.25))
+            ],
+            fontSize: 38,
+            arcHeight: 24,
+            letterSpacing: 3
+        )
+        .frame(height: 72)
+        .shadow(color: .black.opacity(0.65), radius: 4, y: 2)
+        .accessibilityAddTraits(.isHeader)
+    }
 
-                VStack(spacing: 18) {
-                    ArcedTitleText(
-                        segments: [
-                            ("SHOP ", Color(red: 0.2, green: 0.85, blue: 0.9)),
-                            ("SURVIVORS", Color(red: 1.0, green: 0.55, blue: 0.25))
-                        ],
-                        fontSize: 44,
-                        arcHeight: 36,
-                        letterSpacing: 2
-                    )
-                    .frame(height: 100)
+    private var bottomBlock: some View {
+        VStack(spacing: 12) {
+            Text("Protect your partner's budget from relentless sales pitches.")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.9))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .frame(maxWidth: 380)
 
-                    Text("Protect your partner's budget from relentless sales pitches.")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.65))
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 420)
-                }
-
-                Spacer(minLength: 0)
-
-                Button {
-                    AudioManager.shared.playSFX(.ui)
-                    session.goLevelSelect()
-                } label: {
-                    Text("ENTER THE MALL")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(red: 0.08, green: 0.15, blue: 0.18))
-                        .padding(.horizontal, 36)
-                        .padding(.vertical, 14)
-                        .background(Color(red: 1.0, green: 0.55, blue: 0.25))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                .padding(.bottom, 28)
+            Button {
+                AudioManager.shared.playSFX(.ui)
+                Haptics.ui()
+                session.goLevelSelect()
+            } label: {
+                Text("ENTER THE MALL")
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.08, green: 0.15, blue: 0.18))
+                    .frame(minWidth: 200)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 14)
+                    .background(Color(red: 1.0, green: 0.55, blue: 0.25))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
     }
@@ -117,7 +147,7 @@ private struct ArcedTitleText: View {
                 let t = count == 1 ? 0.5 : CGFloat(index) / CGFloat(count - 1)
                 let centered = t - 0.5
                 let y = -arcHeight * cos(centered * .pi)
-                let angle = Double(centered) * 28
+                let angle = Double(centered) * 20
 
                 Text(String(item.0))
                     .font(.system(size: fontSize, weight: .black, design: .rounded))

@@ -12,6 +12,7 @@ final class StoreHubScene: SKScene {
     private var doorZones: [(store: StoreLevel, index: Int, rect: CGRect, locked: Bool)] = []
     private var enterCooldown: TimeInterval = 0
     private var hintLabel: SKLabelNode?
+    private var lastUpdateTime: TimeInterval = 0
     private let arenaSize = CGSize(width: 1200, height: 700)
 
     func configure(session: GameSession) {
@@ -25,6 +26,7 @@ final class StoreHubScene: SKScene {
 
         removeAllChildren()
         doorZones.removeAll()
+        lastUpdateTime = 0
 
         addChild(worldNode)
         buildCorridor()
@@ -77,12 +79,17 @@ final class StoreHubScene: SKScene {
         wall.zPosition = -5
         worldNode.addChild(wall)
 
-        let stores = StoreLevel.all
-        let spacing: CGFloat = 320
+        let stores = StoreLevel.hubStores(mallCleared: session?.mallCleared ?? false)
+        let spacing: CGFloat = stores.count > 3 ? 280 : 320
         let startX = -spacing * CGFloat(stores.count - 1) / 2
 
         for (index, store) in stores.enumerated() {
-            let locked = index > (session?.unlockedStoreIndex ?? 0)
+            let locked: Bool
+            if store.isEndless {
+                locked = !(session?.mallCleared ?? false)
+            } else {
+                locked = index > (session?.unlockedStoreIndex ?? 0)
+            }
             let x = startX + CGFloat(index) * spacing
             buildStorefront(store: store, index: index, at: CGPoint(x: x, y: 120), locked: locked)
         }
@@ -135,20 +142,34 @@ final class StoreHubScene: SKScene {
 
         let nameLabel = SKLabelNode(fontNamed: "Menlo-Bold")
         nameLabel.text = store.name.uppercased()
-        nameLabel.fontSize = 11
+        nameLabel.fontSize = store.isEndless ? 10 : 11
         nameLabel.fontColor = UIColor(store.accentColor)
-        nameLabel.position = CGPoint(x: position.x, y: position.y + 48)
+        nameLabel.position = CGPoint(x: position.x, y: position.y + 52)
         nameLabel.zPosition = 2
         nameLabel.alpha = locked ? 0.5 : 1
         worldNode.addChild(nameLabel)
 
+        let subtitle = SKLabelNode(fontNamed: "Menlo-Bold")
+        subtitle.text = store.subtitle
+        subtitle.fontSize = 8
+        subtitle.fontColor = SKColor(white: 1, alpha: locked ? 0.35 : 0.65)
+        subtitle.position = CGPoint(x: position.x, y: position.y + 36)
+        subtitle.zPosition = 2
+        worldNode.addChild(subtitle)
+
         let detail = SKLabelNode(fontNamed: "Menlo-Bold")
-        detail.text = locked ? "LOCKED" : "ENTER"
+        if locked {
+            detail.text = store.isEndless ? "CLEAR MALL" : "LOCKED"
+        } else if let best = session?.formattedBest(for: store) {
+            detail.text = best
+        } else {
+            detail.text = store.isEndless ? "ENDLESS" : "ENTER"
+        }
         detail.fontSize = 10
         detail.fontColor = locked
             ? SKColor(white: 1, alpha: 0.45)
             : SKColor(red: 1, green: 0.85, blue: 0.4, alpha: 1)
-        detail.position = CGPoint(x: position.x, y: position.y + 28)
+        detail.position = CGPoint(x: position.x, y: position.y + 20)
         detail.zPosition = 2
         worldNode.addChild(detail)
 
@@ -207,7 +228,14 @@ final class StoreHubScene: SKScene {
         if GameControllerManager.shared.isConnected {
             GameControllerManager.shared.pollMovement(into: session)
         }
-        let dt: TimeInterval = 1.0 / 60.0
+        let rawDt: TimeInterval
+        if lastUpdateTime == 0 {
+            rawDt = 1.0 / 60.0
+        } else {
+            rawDt = currentTime - lastUpdateTime
+        }
+        lastUpdateTime = currentTime
+        let dt = min(max(rawDt, 0), 1.0 / 20.0)
         enterCooldown = max(0, enterCooldown - dt)
 
         updatePlayer(dt: dt, session: session)
@@ -271,7 +299,9 @@ final class StoreHubScene: SKScene {
         guard let hintLabel else { return }
         if let zone {
             if zone.locked {
-                hintLabel.text = "Locked — clear the previous store first"
+                hintLabel.text = zone.store.isEndless
+                    ? "Clear Grocery to unlock Midnight Mall"
+                    : "Locked — clear the previous store first"
             } else {
                 hintLabel.text = "Entering \(zone.store.name)…"
             }

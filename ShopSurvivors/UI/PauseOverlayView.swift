@@ -23,6 +23,9 @@ struct PauseOverlayView: View {
                         legendRow("Pitch text", "Clerk draining budget near friend")
                         legendRow("Bump clerks", "Walk into them to shove them")
                         legendRow("Unlock stores", "Survive the timer with $ left")
+                        if GameControllerManager.shared.isConnected {
+                            legendRow("Controller", "Left stick move · A drop LURE · Menu pause")
+                        }
                     }
                     .padding(12)
                 }

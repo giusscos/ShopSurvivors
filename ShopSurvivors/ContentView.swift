@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var session = GameSession()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -28,8 +29,14 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
         .task {
+            Haptics.prepare()
             GameCenterManager.shared.authenticate()
             GameControllerManager.shared.startMonitoring()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .inactive || phase == .background {
+                session.pauseForBackground()
+            }
         }
     }
 }

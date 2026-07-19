@@ -32,6 +32,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var arenaSize = CGSize(width: 1400, height: 900)
     private var shoveSFXCooldown: TimeInterval = 0
     private var controllerConnectObserver: NSObjectProtocol?
+    private var lastUpdateTime: TimeInterval = 0
+    private var hitParticleCooldown: TimeInterval = 0
 
     func configure(session: GameSession, store: StoreLevel) {
         self.session = session
@@ -43,6 +45,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
         isUserInteractionEnabled = true
+        lastUpdateTime = 0
 
         addChild(worldNode)
         worldNode.addChild(entityNode)
@@ -62,6 +65,14 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
+    override func willMove(from view: SKView) {
+        if let controllerConnectObserver {
+            NotificationCenter.default.removeObserver(controllerConnectObserver)
+            self.controllerConnectObserver = nil
+        }
+        lastUpdateTime = 0
+    }
+
     private func buildArena() {
         interestPoints.removeAll()
         shelfRects.removeAll()
@@ -75,35 +86,64 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let rows = Int(arenaSize.height / tileSize)
         for r in 0..<rows {
             for c in 0..<cols {
-                if (r + c) % 2 == 0 { continue }
-                let tile = SKSpriteNode(
-                    color: UIColor(store.accentColor).withAlphaComponent(0.08),
-                    size: CGSize(width: tileSize, height: tileSize)
-                )
-                tile.position = CGPoint(
-                    x: -arenaSize.width / 2 + tileSize / 2 + CGFloat(c) * tileSize,
-                    y: -arenaSize.height / 2 + tileSize / 2 + CGFloat(r) * tileSize
-                )
-                tile.zPosition = -9
-                worldNode.addChild(tile)
+                let useFloorTile = (r + c) % 3 == 0
+                if useFloorTile {
+                    let texture = SKTexture(imageNamed: "floor_tile")
+                    texture.filteringMode = .nearest
+                    let tile = SKSpriteNode(texture: texture, size: CGSize(width: tileSize, height: tileSize))
+                    tile.position = CGPoint(
+                        x: -arenaSize.width / 2 + tileSize / 2 + CGFloat(c) * tileSize,
+                        y: -arenaSize.height / 2 + tileSize / 2 + CGFloat(r) * tileSize
+                    )
+                    tile.zPosition = -9
+                    tile.color = UIColor(store.accentColor)
+                    tile.colorBlendFactor = store.isEndless ? 0.45 : 0.28
+                    tile.alpha = 0.55
+                    worldNode.addChild(tile)
+                } else if (r + c) % 2 != 0 {
+                    let tile = SKSpriteNode(
+                        color: UIColor(store.accentColor).withAlphaComponent(0.08),
+                        size: CGSize(width: tileSize, height: tileSize)
+                    )
+                    tile.position = CGPoint(
+                        x: -arenaSize.width / 2 + tileSize / 2 + CGFloat(c) * tileSize,
+                        y: -arenaSize.height / 2 + tileSize / 2 + CGFloat(r) * tileSize
+                    )
+                    tile.zPosition = -9
+                    worldNode.addChild(tile)
+                }
             }
         }
 
-        for _ in 0..<14 {
+        let shelfTarget = store.shelfCount
+        var placed = 0
+        var attempts = 0
+        while placed < shelfTarget && attempts < shelfTarget * 8 {
+            attempts += 1
             let prop = SKSpriteNode(imageNamed: "prop_shelf")
             prop.texture?.filteringMode = .nearest
-            let shelfSize = CGSize(width: 56, height: 36)
+            let scale: CGFloat = store.id == "fashion" ? 0.9 : (store.id == "grocery" ? 1.15 : 1.0)
+            let shelfSize = CGSize(width: 56 * scale, height: 36 * scale)
             prop.size = shelfSize
-            let pos = CGPoint(
-                x: CGFloat.random(in: -arenaSize.width / 2 + 100...arenaSize.width / 2 - 100),
-                y: CGFloat.random(in: -arenaSize.height / 2 + 100...arenaSize.height / 2 - 100)
-            )
+            let pos: CGPoint
+            if store.id == "electronics" {
+                // Grid-ish aisles
+                let col = CGFloat((placed % 4) - 1) * 180 + CGFloat.random(in: -20...20)
+                let row = CGFloat((placed / 4) - 1) * 140 + CGFloat.random(in: -16...16)
+                pos = CGPoint(x: col, y: row)
+            } else {
+                pos = CGPoint(
+                    x: CGFloat.random(in: -arenaSize.width / 2 + 100...arenaSize.width / 2 - 100),
+                    y: CGFloat.random(in: -arenaSize.height / 2 + 100...arenaSize.height / 2 - 100)
+                )
+            }
             if hypot(pos.x, pos.y) < 160 { continue }
             prop.position = pos
             prop.zPosition = -5
             prop.color = UIColor(store.accentColor)
-            prop.colorBlendFactor = 0.25
+            prop.colorBlendFactor = store.isEndless ? 0.4 : 0.25
             worldNode.addChild(prop)
+            placed += 1
 
             let inset: CGFloat = 4
             shelfRects.append(CGRect(
@@ -184,13 +224,25 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             GameControllerManager.shared.pollMovement(into: session)
         }
         if session.isGameplayFrozen {
+            lastUpdateTime = currentTime
             syncAimGhost(session: session)
             return
         }
 
-        let dt: TimeInterval = 1.0 / 60.0
+        let rawDt: TimeInterval
+        if lastUpdateTime == 0 {
+            rawDt = 1.0 / 60.0
+        } else {
+            rawDt = currentTime - lastUpdateTime
+        }
+        lastUpdateTime = currentTime
+        // Clamp so background hitch / debugger pause doesn't explode simulation.
+        let dt = min(max(rawDt, 0), 1.0 / 20.0)
+
         elapsed += dt
+        session.runElapsed = elapsed
         shoveSFXCooldown = max(0, shoveSFXCooldown - dt)
+        hitParticleCooldown = max(0, hitParticleCooldown - dt)
 
         updateTimer(dt: dt, session: session)
         updatePlayer(dt: dt, session: session)
@@ -297,6 +349,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
         AudioManager.shared.playSFX(.coupon)
+        session.noteLureDeployed()
+        Haptics.ui()
     }
 
     // MARK: - Controller Support
@@ -336,9 +390,14 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     // MARK: - Systems
 
     private func updateTimer(dt: TimeInterval, session: GameSession) {
-        session.timeRemaining = max(0, session.timeRemaining - dt)
-        if session.timeRemaining <= 0 {
-            session.endRun(won: session.budget > 0, storeId: store.id)
+        if store.isEndless {
+            // Endless: survive until budget hits 0 — no timed win.
+            session.timeRemaining = elapsed
+        } else {
+            session.timeRemaining = max(0, session.timeRemaining - dt)
+            if session.timeRemaining <= 0 {
+                session.endRun(won: session.budget > 0, storeId: store.id)
+            }
         }
         if session.couponCooldown > 0 {
             session.couponCooldown = max(0, session.couponCooldown - dt)
@@ -545,6 +604,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         if shoved, shoveSFXCooldown <= 0 {
             AudioManager.shared.playSFX(.shove, volume: 0.7)
+            Haptics.shove()
             shoveSFXCooldown = 0.2
         }
     }
@@ -610,7 +670,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         if spawnTimer <= 0 {
             spawnTimer = store.spawnInterval(at: elapsed)
             spawnClerk(type: store.weightedClerk())
-            if elapsed / store.duration > 0.55, Bool.random() {
+            if store.difficultyProgress(elapsed: elapsed) > 0.55, Bool.random() {
                 spawnClerk(type: store.weightedClerk())
             }
         }
@@ -675,6 +735,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func fireWeapon(_ owned: OwnedWeapon, session: GameSession) {
         let dmg = owned.kind.damage(level: owned.level)
+        playWeaponFireSFX(owned.kind)
         switch owned.kind {
         case .priceTags:
             let radius = owned.kind.auraRadius(level: owned.level)
@@ -742,6 +803,15 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                     hitClerk(clerk, damage: dmg, from: player.position, session: session, knockbackStrength: 280)
                 }
             }
+        }
+    }
+
+    private func playWeaponFireSFX(_ kind: WeaponKind) {
+        switch kind {
+        case .priceTags: AudioManager.shared.playSFX(.aura, volume: 0.28)
+        case .receipts: AudioManager.shared.playSFX(.receipt, volume: 0.4)
+        case .barcodeLaser: AudioManager.shared.playSFX(.laser, volume: 0.35)
+        case .shoppingBag: AudioManager.shared.playSFX(.bag, volume: 0.45)
         }
     }
 
@@ -833,6 +903,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let kb = CGVector(dx: dx / dist * knockbackStrength, dy: dy / dist * knockbackStrength)
         clerk.applyDamage(damage, knockback: kb)
         AudioManager.shared.playSFX(.hit, volume: 0.55)
+        if hitParticleCooldown <= 0 {
+            spawnHitSparks(at: clerk.position)
+            hitParticleCooldown = 0.05
+            Haptics.hit()
+        }
         if clerk.hp <= 0 {
             defeatClerk(clerk, session: session)
         }
@@ -842,6 +917,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         guard let idx = clerks.firstIndex(where: { $0 === clerk }) else { return }
         clerks.remove(at: idx)
         AudioManager.shared.playSFX(.defeat)
+        spawnHitSparks(at: clerk.position, count: 10)
 
         let orb = XPOrbNode(amount: clerk.clerkType.xpReward)
         orb.position = clerk.position
@@ -857,12 +933,51 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         ]))
     }
 
+    private func spawnHitSparks(at position: CGPoint, count: Int = 5) {
+        for _ in 0..<count {
+            let spark = SKShapeNode(circleOfRadius: CGFloat.random(in: 1.5...3.2))
+            spark.fillColor = SKColor(red: 1, green: CGFloat.random(in: 0.7...0.95), blue: 0.3, alpha: 1)
+            spark.strokeColor = .clear
+            spark.position = position
+            spark.zPosition = 50
+            entityNode.addChild(spark)
+            let dx = CGFloat.random(in: -40...40)
+            let dy = CGFloat.random(in: -40...40)
+            spark.run(SKAction.sequence([
+                SKAction.group([
+                    SKAction.moveBy(x: dx, y: dy, duration: 0.28),
+                    SKAction.fadeOut(withDuration: 0.28),
+                    SKAction.scale(to: 0.2, duration: 0.28)
+                ]),
+                SKAction.removeFromParent()
+            ]))
+        }
+    }
+
+    private func spawnLevelUpFlash() {
+        let flash = SKShapeNode(circleOfRadius: 40)
+        flash.fillColor = SKColor(red: 0.3, green: 0.9, blue: 1.0, alpha: 0.35)
+        flash.strokeColor = SKColor(red: 0.5, green: 1.0, blue: 1.0, alpha: 0.8)
+        flash.lineWidth = 2
+        flash.position = player.position
+        flash.zPosition = 45
+        entityNode.addChild(flash)
+        flash.run(SKAction.sequence([
+            SKAction.group([
+                SKAction.scale(to: 3.2, duration: 0.35),
+                SKAction.fadeOut(withDuration: 0.35)
+            ]),
+            SKAction.removeFromParent()
+        ]))
+    }
+
     private func gainXP(_ amount: Int, session: GameSession) {
         session.xp += amount
         while session.xp >= session.xpToNext {
             session.xp -= session.xpToNext
             session.playerLevel += 1
             session.xpToNext = Int(12 + Double(session.playerLevel) * 7.5)
+            spawnLevelUpFlash()
             let offers = generateUpgradeOffers(session: session)
             session.presentUpgrades(offers)
         }

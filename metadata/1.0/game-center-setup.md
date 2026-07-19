@@ -7,15 +7,16 @@ Configure everything in **App Store Connect → your app → Features → Game C
 
 ## Leaderboards
 
-Create 3 **Classic Leaderboards** with the following settings:
+Create **4 Classic Leaderboards** with the following settings:
 
-| Field | Electronics | Fashion | Grocery |
-|---|---|---|---|
-| Reference Name | Electronics Budget | Fashion Budget | Grocery Budget |
-| Leaderboard ID | `leaderboard_electronics_budget` | `leaderboard_fashion_budget` | `leaderboard_grocery_budget` |
-| Score Format Type | Fixed Point | Fixed Point | Fixed Point |
-| Decimal Places | 2 | 2 | 2 |
-| Score Order | High to Low | High to Low | High to Low |
+| Field | Electronics | Fashion | Grocery | Endless |
+|---|---|---|---|---|
+| Reference Name | Electronics Budget | Fashion Budget | Grocery Budget | Endless Survival |
+| Leaderboard ID | `leaderboard_electronics_budget` | `leaderboard_fashion_budget` | `leaderboard_grocery_budget` | `leaderboard_endless_survival` |
+| Score Format Type | Fixed Point | Fixed Point | Fixed Point | Integer |
+| Decimal Places | 2 | 2 | 2 | — |
+| Score Order | High to Low | High to Low | High to Low | High to Low |
+| Unit (Endless) | — | — | — | Seconds (or leave blank / “sec”) |
 
 **Localization display names:**
 
@@ -24,15 +25,18 @@ Create 3 **Classic Leaderboards** with the following settings:
 | `leaderboard_electronics_budget` | Electronics Megamart |
 | `leaderboard_fashion_budget` | Fashion Boutique |
 | `leaderboard_grocery_budget` | Grocery Warehouse |
+| `leaderboard_endless_survival` | Midnight Mall |
 
-> Score format is Fixed Point with 2 decimals so that the raw integer score
-> (budget × 100) displays as a dollar amount — e.g. 5045 → $50.45.
+> Campaign boards: Fixed Point with 2 decimals so raw score (budget × 100) shows as dollars — e.g. 5045 → $50.45.
+> Endless board: integer seconds survived.
+
+Art: `Art/Leaderboards/leaderboard_*_budget.png` plus `leaderboard_endless_survival.png`.
 
 ---
 
 ## Achievements
 
-Create 5 achievements:
+Create **7 achievements**:
 
 | Reference Name | Achievement ID | Points | Hidden |
 |---|---|---|---|
@@ -41,6 +45,8 @@ Create 5 achievements:
 | Big Saver | `achievement_big_saver` | 25 | No |
 | High Roller | `achievement_high_roller` | 25 | No |
 | Veteran Shopper | `achievement_veteran` | 50 | No |
+| Coupon King | `achievement_coupon_king` | 25 | No |
+| Night Owl | `achievement_night_owl` | 25 | No |
 
 **Localization descriptions:**
 
@@ -51,6 +57,10 @@ Create 5 achievements:
 | `achievement_big_saver` | Big Saver | Win a run with $80 or more budget remaining. |
 | `achievement_high_roller` | High Roller | Reach player level 8 in a single run. |
 | `achievement_veteran` | Veteran Shopper | Win 5 total runs. (shows progress in Game Center) |
+| `achievement_coupon_king` | Coupon King | Deploy 10 LURE coupons in a single run. |
+| `achievement_night_owl` | Night Owl | Survive for 2 minutes in Midnight Mall. |
+
+Art: `Art/Achievements/achievement_*.png` (add `achievement_coupon_king.png` and `achievement_night_owl.png`).
 
 ---
 
@@ -62,10 +72,11 @@ In Xcode → target → **Signing & Capabilities** → **+ Capability** → add 
 
 ## Score Logic (code reference)
 
-- Score submitted = `Int(budget * 100)` (cents precision)
-- Only submitted on a **win** (`endRun(won: true, ...)`)
-- Achievements evaluated in `GameCenterManager.evaluateAchievements(budget:playerLevel:storeId:)`
+- Campaign score submitted = `Int(budget * 100)` (cents precision) on win
+- Endless score submitted = `Int(seconds)` on run end
+- Achievements evaluated in `GameCenterManager`
 - Total wins tracked in `UserDefaults` under key `gcTotalWins`
+- Local bests always save even when Game Center is unavailable
 
 ---
 
