@@ -47,6 +47,8 @@ final class GameSession: ObservableObject {
     @Published var luresDeployed: Int = 0
     /// Bumps when local bests change so hub UI refreshes.
     @Published var bestScoresRevision: Int = 0
+    /// Non-nil while the difficulty picker overlay should be shown for a store.
+    @Published var pendingStoreForDifficulty: StoreLevel?
 
     /// Joystick input written by SwiftUI, read by SpriteKit each frame.
     var moveVector: CGVector = .zero
@@ -67,12 +69,26 @@ final class GameSession: ObservableObject {
     private let bestBudgetPrefix = "bestBudget_"
     private let bestEndlessKey = "bestEndlessSeconds"
     private var toastClearTask: Task<Void, Never>?
+    private var cloudObserver: NSObjectProtocol?
 
     init() {
         unlockedStoreIndex = UserDefaults.standard.integer(forKey: unlockedKey)
         mallCleared = UserDefaults.standard.bool(forKey: mallClearedKey)
         let seenIntro = UserDefaults.standard.bool(forKey: introKey)
         screen = seenIntro ? .title : .intro
+        syncFromCloud()
+        cloudObserver = NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: NSUbiquitousKeyValueStore.default,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.syncFromCloud()
+                self.bestScoresRevision += 1
+            }
+        }
+        NSUbiquitousKeyValueStore.default.synchronize()
     }
 
     var hasCompletedTutorial: Bool {
@@ -102,6 +118,7 @@ final class GameSession: ObservableObject {
         isAimingCoupon = false
         upgradeQueue = []
         upgradeOffers = []
+        pendingStoreForDifficulty = nil
     }
 
     func goTitle() {
@@ -181,6 +198,7 @@ final class GameSession: ObservableObject {
         couponAimWorld = nil
         couponDeployRequested = false
         runID = UUID()
+        pendingStoreForDifficulty = nil
         isTutorialActive = !hasCompletedTutorial && !store.isEndless
         screen = .playing(storeId: store.id)
         AudioManager.shared.playMusic()
@@ -204,6 +222,8 @@ final class GameSession: ObservableObject {
         mallCleared = false
         UserDefaults.standard.set(0, forKey: unlockedKey)
         UserDefaults.standard.set(false, forKey: mallClearedKey)
+        NSUbiquitousKeyValueStore.default.set(Int64(0), forKey: unlockedKey)
+        NSUbiquitousKeyValueStore.default.set(false, forKey: mallClearedKey)
     }
 
     func togglePause() {
@@ -236,11 +256,14 @@ final class GameSession: ObservableObject {
         if next > unlockedStoreIndex && next < StoreLevel.all.count {
             unlockedStoreIndex = next
             UserDefaults.standard.set(unlockedStoreIndex, forKey: unlockedKey)
+            NSUbiquitousKeyValueStore.default.set(Int64(unlockedStoreIndex), forKey: unlockedKey)
         } else if next >= StoreLevel.all.count {
             unlockedStoreIndex = max(unlockedStoreIndex, StoreLevel.all.count - 1)
             UserDefaults.standard.set(unlockedStoreIndex, forKey: unlockedKey)
+            NSUbiquitousKeyValueStore.default.set(Int64(unlockedStoreIndex), forKey: unlockedKey)
             mallCleared = true
             UserDefaults.standard.set(true, forKey: mallClearedKey)
+            NSUbiquitousKeyValueStore.default.set(true, forKey: mallClearedKey)
         }
     }
 
@@ -336,6 +359,7 @@ final class GameSession: ObservableObject {
         }
 
         let store = StoreLevel.byId(storeId)
+        let baseId = StoreLevel.baseId(from: storeId)
         if store?.isEndless == true {
             recordEndlessBest(seconds: runElapsed)
             GameCenterManager.shared.submitEndlessScore(seconds: runElapsed)
@@ -345,13 +369,13 @@ final class GameSession: ObservableObject {
                 playerLevel: playerLevel
             )
         } else if won {
-            unlockNextIfNeeded(clearedStoreId: storeId)
-            recordBestBudget(budget, storeId: storeId)
-            GameCenterManager.shared.submitWinScore(budget: budget, storeId: storeId)
+            unlockNextIfNeeded(clearedStoreId: baseId)
+            recordBestBudget(budget, storeId: baseId)
+            GameCenterManager.shared.submitWinScore(budget: budget, storeId: baseId)
             GameCenterManager.shared.evaluateAchievements(
                 budget: budget,
                 playerLevel: playerLevel,
-                storeId: storeId,
+                storeId: baseId,
                 luresDeployed: luresDeployed
             )
         }
@@ -372,6 +396,7 @@ final class GameSession: ObservableObject {
         let previous = UserDefaults.standard.double(forKey: key)
         if Double(value) > previous {
             UserDefaults.standard.set(Double(value), forKey: key)
+            NSUbiquitousKeyValueStore.default.set(Double(value), forKey: key)
             bestScoresRevision += 1
         }
     }
@@ -380,6 +405,7 @@ final class GameSession: ObservableObject {
         let previous = UserDefaults.standard.double(forKey: bestEndlessKey)
         if seconds > previous {
             UserDefaults.standard.set(seconds, forKey: bestEndlessKey)
+            NSUbiquitousKeyValueStore.default.set(seconds, forKey: bestEndlessKey)
             bestScoresRevision += 1
         }
     }
@@ -410,6 +436,30 @@ final class GameSession: ObservableObject {
             if !Task.isCancelled {
                 pickupToast = ""
             }
+        }
+    }
+
+    private func syncFromCloud() {
+        let kvs = NSUbiquitousKeyValueStore.default
+        let cloudUnlocked = Int(kvs.longLong(forKey: unlockedKey))
+        if cloudUnlocked > unlockedStoreIndex {
+            unlockedStoreIndex = cloudUnlocked
+            UserDefaults.standard.set(cloudUnlocked, forKey: unlockedKey)
+        }
+        if kvs.bool(forKey: mallClearedKey), !mallCleared {
+            mallCleared = true
+            UserDefaults.standard.set(true, forKey: mallClearedKey)
+        }
+        for store in StoreLevel.all {
+            let key = bestBudgetPrefix + store.id
+            let cloudBest = kvs.double(forKey: key)
+            if cloudBest > UserDefaults.standard.double(forKey: key) {
+                UserDefaults.standard.set(cloudBest, forKey: key)
+            }
+        }
+        let cloudEndless = kvs.double(forKey: bestEndlessKey)
+        if cloudEndless > UserDefaults.standard.double(forKey: bestEndlessKey) {
+            UserDefaults.standard.set(cloudEndless, forKey: bestEndlessKey)
         }
     }
 }

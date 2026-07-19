@@ -13,6 +13,7 @@ final class StoreHubScene: SKScene {
     private var enterCooldown: TimeInterval = 0
     private var hintLabel: SKLabelNode?
     private var lastUpdateTime: TimeInterval = 0
+    private var wasDifficultyPending = false
     private let arenaSize = CGSize(width: 1200, height: 700)
 
     func configure(session: GameSession) {
@@ -225,8 +226,37 @@ final class StoreHubScene: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         guard let session else { return }
+
+        let difficultyPending = session.pendingStoreForDifficulty != nil
+        if wasDifficultyPending, !difficultyPending {
+            // Picker just closed — stop re-triggering while still standing in the door.
+            enterCooldown = 1.5
+            nudgeOutOfDoorIfNeeded()
+            session.moveVector = .zero
+        }
+        wasDifficultyPending = difficultyPending
+
+        if difficultyPending {
+            session.moveVector = .zero
+            let rawDt: TimeInterval
+            if lastUpdateTime == 0 {
+                rawDt = 1.0 / 60.0
+            } else {
+                rawDt = currentTime - lastUpdateTime
+            }
+            lastUpdateTime = currentTime
+            let dt = min(max(rawDt, 0), 1.0 / 20.0)
+            updatePlayer(dt: dt, session: session)
+            updateCompanion(dt: dt)
+            updateCamera()
+            return
+        }
+
         if GameControllerManager.shared.isConnected {
             GameControllerManager.shared.pollMovement(into: session)
+        }
+        if GCKeyboard.coalesced != nil {
+            GameControllerManager.shared.pollKeyboard(into: session)
         }
         let rawDt: TimeInterval
         if lastUpdateTime == 0 {
@@ -242,6 +272,13 @@ final class StoreHubScene: SKScene {
         updateCompanion(dt: dt)
         updateCamera()
         checkDoorEntry(session: session)
+    }
+
+    private func nudgeOutOfDoorIfNeeded() {
+        for zone in doorZones where !zone.locked && zone.rect.contains(player.position) {
+            player.position.y = min(player.position.y, zone.rect.minY - 16)
+            break
+        }
     }
 
     private func updatePlayer(dt: TimeInterval, session: GameSession) {
@@ -303,7 +340,9 @@ final class StoreHubScene: SKScene {
                     ? "Clear Grocery to unlock Midnight Mall"
                     : "Locked — clear the previous store first"
             } else {
-                hintLabel.text = "Entering \(zone.store.name)…"
+                hintLabel.text = zone.store.isEndless
+                    ? "Entering \(zone.store.name)…"
+                    : "Choose difficulty · \(zone.store.name)"
             }
         } else {
             hintLabel.text = "Walk into a store door  ·  Tap a storefront to enter"
@@ -314,7 +353,12 @@ final class StoreHubScene: SKScene {
         guard enterCooldown <= 0 else { return }
         enterCooldown = 1
         AudioManager.shared.playSFX(.door)
-        session?.startStore(store)
+        if store.isEndless {
+            session?.startStore(store)
+        } else {
+            session?.moveVector = .zero
+            session?.pendingStoreForDifficulty = store
+        }
     }
 
     private func clampToArena(_ node: SKNode) {
@@ -325,6 +369,7 @@ final class StoreHubScene: SKScene {
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard session?.pendingStoreForDifficulty == nil else { return }
         guard let touch = touches.first else { return }
         let point = touch.location(in: worldNode)
         let hit = worldNode.nodes(at: point)

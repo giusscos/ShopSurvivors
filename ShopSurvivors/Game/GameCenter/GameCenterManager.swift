@@ -1,6 +1,9 @@
 import Combine
 import GameKit
+import OSLog
 import UIKit
+
+private let gcLogger = Logger(subsystem: "ShopSurvivors", category: "GameCenter")
 
 // MARK: - Leaderboard & Achievement IDs
 
@@ -61,7 +64,7 @@ final class GameCenterManager: NSObject, ObservableObject {
                     self.isAuthenticated = false
                     self.authFailed = true
                     self.statusMessage = "Game Center unavailable. Scores stay on this device."
-                    print("Game Center auth error: \(error.localizedDescription)")
+                    gcLogger.warning("Game Center auth error: \(error.localizedDescription, privacy: .public)")
                 } else {
                     self.isAuthenticated = GKLocalPlayer.local.isAuthenticated
                     self.authFailed = !self.isAuthenticated
@@ -96,7 +99,7 @@ final class GameCenterManager: NSObject, ObservableObject {
                     leaderboardIDs: [boardID]
                 )
             } catch {
-                print("Score submit failed: \(error.localizedDescription)")
+                gcLogger.error("Score submit failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -113,7 +116,7 @@ final class GameCenterManager: NSObject, ObservableObject {
                     leaderboardIDs: [GameCenterID.Leaderboard.endless]
                 )
             } catch {
-                print("Endless score submit failed: \(error.localizedDescription)")
+                gcLogger.error("Endless score submit failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -148,7 +151,7 @@ final class GameCenterManager: NSObject, ObservableObject {
             do {
                 try await GKAchievement.report([achievement])
             } catch {
-                print("Achievement report failed: \(error.localizedDescription)")
+                gcLogger.error("Achievement report failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

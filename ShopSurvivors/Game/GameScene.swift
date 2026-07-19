@@ -223,6 +223,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         if GameControllerManager.shared.isConnected {
             GameControllerManager.shared.pollMovement(into: session)
         }
+        if GCKeyboard.coalesced != nil {
+            GameControllerManager.shared.pollKeyboard(into: session)
+        }
         if session.isGameplayFrozen {
             lastUpdateTime = currentTime
             syncAimGhost(session: session)

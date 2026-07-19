@@ -10,9 +10,22 @@
 		3B1A0707300C1EA6003171F0 /* ShopSurvivors.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShopSurvivors.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		3B1A0BE4300CEE2D003171F0 /* Exceptions for "ShopSurvivors" folder in "ShopSurvivors" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 3B1A0706300C1EA6003171F0 /* ShopSurvivors */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		3B1A0709300C1EA6003171F0 /* ShopSurvivors */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				3B1A0BE4300CEE2D003171F0 /* Exceptions for "ShopSurvivors" folder in "ShopSurvivors" target */,
+			);
 			path = ShopSurvivors;
 			sourceTree = "<group>";
 		};
@@ -257,6 +270,7 @@
 				DEVELOPMENT_TEAM = MA7MBQ947C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ShopSurvivors/Info.plist;
 				INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Shop Survivors";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;
@@ -298,6 +312,7 @@
 				DEVELOPMENT_TEAM = MA7MBQ947C;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ShopSurvivors/Info.plist;
 				INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Shop Survivors";
 				INFOPLIST_KEY_GCSupportsControllerUserInteraction = YES;

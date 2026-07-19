@@ -3,6 +3,8 @@ import SwiftUI
 struct VirtualJoystick: View {
     @Binding var vector: CGVector
     var size: CGFloat = 110
+    /// When true, knob snaps to center and input is ignored.
+    var locked: Bool = false
 
     @State private var dragOffset: CGSize = .zero
 
@@ -24,6 +26,7 @@ struct VirtualJoystick: View {
         .gesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
+                    guard !locked else { return }
                     let maxR = size * 0.32
                     let deadzone: CGFloat = 6
                     var dx = value.translation.width
@@ -47,5 +50,12 @@ struct VirtualJoystick: View {
                     vector = .zero
                 }
         )
+        .allowsHitTesting(!locked)
+        .onChange(of: locked) { _, isLocked in
+            if isLocked {
+                dragOffset = .zero
+                vector = .zero
+            }
+        }
     }
 }

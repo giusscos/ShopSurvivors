@@ -1,6 +1,35 @@
 import Foundation
 import SwiftUI
 
+enum DifficultyTier: Int, CaseIterable, Identifiable {
+    case easy, normal, hard
+    var id: Int { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .easy:   "EASY"
+        case .normal: "NORMAL"
+        case .hard:   "HARD"
+        }
+    }
+
+    var blurb: String {
+        switch self {
+        case .easy:   "More budget · fewer clerks"
+        case .normal: "Standard challenge"
+        case .hard:   "Less budget · relentless spawn"
+        }
+    }
+
+    var accentColor: Color {
+        switch self {
+        case .easy:   Color(red: 0.35, green: 0.9, blue: 0.55)
+        case .normal: Color(red: 0.2, green: 0.85, blue: 0.9)
+        case .hard:   Color(red: 1.0, green: 0.4, blue: 0.35)
+        }
+    }
+}
+
 struct StoreLevel: Identifiable, Equatable {
     let id: String
     let name: String
@@ -135,11 +164,61 @@ struct StoreLevel: Identifiable, Equatable {
 
     static func byId(_ id: String) -> StoreLevel? {
         if id == endless.id { return endless }
-        return all.first { $0.id == id }
+        if let store = all.first(where: { $0.id == id }) { return store }
+        let base = baseId(from: id)
+        guard let baseStore = all.first(where: { $0.id == base }) else { return nil }
+        if id.hasSuffix("_easy") { return baseStore.withDifficulty(.easy) }
+        if id.hasSuffix("_hard") { return baseStore.withDifficulty(.hard) }
+        return nil
     }
 
     /// Campaign stores plus Endless once the mall is cleared.
     static func hubStores(mallCleared: Bool) -> [StoreLevel] {
         mallCleared ? all + [endless] : all
+    }
+
+    var baseId: String {
+        for suffix in ["_easy", "_hard"] {
+            if id.hasSuffix(suffix) { return String(id.dropLast(suffix.count)) }
+        }
+        return id
+    }
+
+    static func baseId(from id: String) -> String {
+        for suffix in ["_easy", "_hard"] {
+            if id.hasSuffix(suffix) { return String(id.dropLast(suffix.count)) }
+        }
+        return id
+    }
+
+    func withDifficulty(_ tier: DifficultyTier) -> StoreLevel {
+        switch tier {
+        case .easy:
+            return StoreLevel(
+                id: id + "_easy", name: name, subtitle: subtitle,
+                duration: duration > 0 ? duration * 0.8 : 0,
+                startingBudget: startingBudget * 1.4,
+                floorColor: floorColor, accentColor: accentColor,
+                clerkWeights: clerkWeights, startingWeapon: startingWeapon,
+                spawnIntervalStart: spawnIntervalStart * 1.5,
+                spawnIntervalEnd: spawnIntervalEnd * 1.5,
+                maxClerks: max(15, maxClerks - 12),
+                shelfCount: shelfCount
+            )
+        case .normal:
+            return self
+        case .hard:
+            return StoreLevel(
+                id: id + "_hard", name: name, subtitle: subtitle,
+                duration: duration > 0 ? duration * 1.3 : 0,
+                startingBudget: startingBudget * 0.65,
+                floorColor: floorColor, accentColor: accentColor,
+                clerkWeights: clerkWeights, startingWeapon: startingWeapon,
+                spawnIntervalStart: spawnIntervalStart * 0.75,
+                spawnIntervalEnd: spawnIntervalEnd * 0.75,
+                maxClerks: maxClerks + 15,
+                shelfCount: shelfCount
+            )
+        }
     }
 }

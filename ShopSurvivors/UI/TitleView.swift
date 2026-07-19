@@ -56,6 +56,7 @@ struct TitleView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
+            AudioMuteButtons(size: 40, cornerRadius: 10)
             Spacer(minLength: 0)
             Button {
                 AudioManager.shared.playSFX(.ui)
@@ -82,6 +83,7 @@ struct TitleView: View {
                     .background(Color.black.opacity(0.45))
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
+            .accessibilityLabel("Settings")
         }
     }
 

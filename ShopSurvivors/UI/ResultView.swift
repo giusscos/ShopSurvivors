@@ -7,13 +7,13 @@ struct ResultView: View {
 
     private var nextStore: StoreLevel? {
         guard session.outcome == .won,
-              let idx = StoreLevel.all.firstIndex(where: { $0.id == store.id }),
+              let idx = StoreLevel.all.firstIndex(where: { $0.id == store.baseId }),
               idx + 1 < StoreLevel.all.count else { return nil }
         return StoreLevel.all[idx + 1]
     }
 
     private var unlocksEndless: Bool {
-        session.outcome == .won && store.id == StoreLevel.all.last?.id
+        session.outcome == .won && store.baseId == StoreLevel.all.last?.id
     }
 
     var body: some View {
@@ -92,7 +92,7 @@ struct ResultView: View {
                         Button {
                             AudioManager.shared.playSFX(.ui)
                             Haptics.ui()
-                            session.startStore(next)
+                            session.pendingStoreForDifficulty = next
                         } label: {
                             resultButton("Next Store", filled: true)
                         }

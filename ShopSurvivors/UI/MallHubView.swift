@@ -7,6 +7,12 @@ struct MallHubView: View {
     @ObservedObject private var controllerManager = GameControllerManager.shared
     @State private var scene: StoreHubScene
     @State private var joystickVector: CGVector = .zero
+    /// Remounts the joystick to cancel any in-progress drag when the picker opens/closes.
+    @State private var joystickEpoch = 0
+
+    private var isDifficultyPickerOpen: Bool {
+        session.pendingStoreForDifficulty != nil
+    }
 
     init(session: GameSession) {
         self.session = session
@@ -24,18 +30,21 @@ struct MallHubView: View {
 
             VStack {
                 HStack {
-                    Button {
-                        AudioManager.shared.playSFX(.ui)
-                        Haptics.ui()
-                        session.goTitle()
-                    } label: {
-                        Label("Back", systemImage: "chevron.left")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.black.opacity(0.45))
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    HStack(spacing: 8) {
+                        Button {
+                            AudioManager.shared.playSFX(.ui)
+                            Haptics.ui()
+                            session.goTitle()
+                        } label: {
+                            Label("Back", systemImage: "chevron.left")
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.black.opacity(0.45))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        AudioMuteButtons(size: 36, cornerRadius: 8)
                     }
 
                     Spacer()
@@ -63,6 +72,8 @@ struct MallHubView: View {
                                 .background(Color.black.opacity(0.45))
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
+                        .accessibilityLabel("Game Center")
+                        .accessibilityHint("Opens leaderboards and achievements")
                         Button {
                             AudioManager.shared.playSFX(.ui)
                             Haptics.ui()
@@ -75,6 +86,7 @@ struct MallHubView: View {
                                 .background(Color.black.opacity(0.45))
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
+                        .accessibilityLabel("Settings")
                     }
                 }
                 .padding(.horizontal, 20)
@@ -93,8 +105,9 @@ struct MallHubView: View {
                 Spacer()
 
                 HStack(alignment: .bottom) {
-                    if !controllerManager.isConnected {
-                        VirtualJoystick(vector: $joystickVector)
+                    if !controllerManager.isConnected && !controllerManager.keyboardActive {
+                        VirtualJoystick(vector: $joystickVector, locked: isDifficultyPickerOpen)
+                            .id(joystickEpoch)
                             .padding(.leading, 28)
                             .padding(.bottom, 16)
                     }
@@ -115,10 +128,17 @@ struct MallHubView: View {
             AudioManager.shared.playMusic(forceRestart: false)
         }
         .onChange(of: joystickVector.dx) { _, _ in
+            guard !isDifficultyPickerOpen else { return }
             session.moveVector = joystickVector
         }
         .onChange(of: joystickVector.dy) { _, _ in
+            guard !isDifficultyPickerOpen else { return }
             session.moveVector = joystickVector
+        }
+        .onChange(of: session.pendingStoreForDifficulty) { _, _ in
+            joystickVector = .zero
+            session.moveVector = .zero
+            joystickEpoch += 1
         }
         .onChange(of: session.unlockedStoreIndex) { _, _ in
             rebuildScene()

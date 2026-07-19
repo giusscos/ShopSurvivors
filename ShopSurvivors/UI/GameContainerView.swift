@@ -98,33 +98,33 @@ struct GameContainerView: View {
     }
 
     private var topHUD: some View {
-        VStack(spacing: 6) {
-            HStack(alignment: .top) {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
                 budgetBar
-                Spacer()
-                VStack(spacing: 4) {
-                    if !session.pitchBanner.isEmpty {
-                        Text(session.pitchBanner)
-                            .font(.system(size: 13, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color(red: 1, green: 0.85, blue: 0.3))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Color.black.opacity(0.45))
-                            .clipShape(Capsule())
-                    }
-                    Text(store.isEndless
-                         ? "Endless · last as long as you can"
-                         : "Protect FRIEND · shove clerks")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.55))
-                }
-                Spacer()
-                HStack(spacing: 8) {
-                    timerBadge
-                    pauseButton
-                }
+                xpBar
             }
-            xpBar
+            Spacer()
+            VStack(spacing: 4) {
+                if !session.pitchBanner.isEmpty {
+                    Text(session.pitchBanner)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(red: 1, green: 0.85, blue: 0.3))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.45))
+                        .clipShape(Capsule())
+                }
+                Text(store.isEndless
+                     ? "Endless · last as long as you can"
+                     : "Protect FRIEND · shove clerks")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+            Spacer()
+            HStack(spacing: 8) {
+                timerBadge
+                pauseButton
+            }
         }
     }
 
@@ -147,8 +147,10 @@ struct GameContainerView: View {
         return HStack(spacing: 8) {
             Text("$\(String(format: "%.2f", Double(session.budget)))")
                 .font(.system(size: 16, weight: .black, design: .rounded))
+                .monospacedDigit()
                 .foregroundStyle(pct < 0.25 ? Color.red : Color(red: 0.35, green: 0.9, blue: 0.55))
-                .frame(minWidth: 64, alignment: .leading)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -206,7 +208,7 @@ struct GameContainerView: View {
 
     private func bottomHUD(geo: GeometryProxy) -> some View {
         HStack(alignment: .bottom) {
-            if !controllerManager.isConnected {
+            if !controllerManager.isConnected && !controllerManager.keyboardActive {
                 VirtualJoystick(vector: $joystickVector)
                     .padding(.leading, 8)
                     .opacity(session.isPaused || session.isTutorialActive ? 0.3 : 1)

@@ -45,6 +45,8 @@ struct UpgradePickerView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("\(offer.kind.title(weapon: offer.weapon)): \(offer.kind.blurb(weapon: offer.weapon))")
+                        .accessibilityHint("Double tap to apply this upgrade")
                     }
                 }
             }
