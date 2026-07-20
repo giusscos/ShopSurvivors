@@ -31,7 +31,7 @@ enum WeaponKind: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .priceTags: "Small damage ring around you"
         case .receipts: "Fire paper projectiles at nearest clerks"
-        case .barcodeLaser: "Sweeping laser beam"
+        case .barcodeLaser: "Short-range barcode scan cone"
         case .shoppingBag: "Pulse knockback around you"
         }
     }
@@ -68,6 +68,17 @@ enum WeaponKind: String, CaseIterable, Identifiable, Codable {
     /// Close-range aura (Price Aura). Kept well below LURE's 140 radius.
     func auraRadius(level: Int) -> CGFloat {
         42 + CGFloat(level - 1) * 5
+    }
+
+    /// Facing cone length for Barcode Laser (medium-short; beyond aura, not a long beam).
+    func laserRange(level: Int) -> CGFloat {
+        120 + CGFloat(level - 1) * 8
+    }
+
+    /// Half-angle in radians (~40° base, slight widen per level).
+    func laserHalfAngle(level: Int) -> CGFloat {
+        let degrees = 40 + CGFloat(level - 1) * 2
+        return degrees * (.pi / 180)
     }
 }
 

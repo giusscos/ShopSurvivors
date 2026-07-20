@@ -509,19 +509,49 @@ final class BenchmarkScene: SKScene {
     }
 
     private func fireLaser() {
-        let angle = CGFloat.random(in: 0...(2 * .pi))
-        let length: CGFloat = 200
-        let dx = cos(angle), dy = sin(angle)
-        let node = acquireProjectile(named: "proj_laser", size: CGSize(width: length, height: 12))
-        node.anchorPoint = CGPoint(x: 0, y: 0.5)
-        node.position = player.position
-        node.zRotation = angle
-        entityNode.addChild(node)
-        projectiles.append(BenchProjectile(node: node, velocity: .zero, life: 0.25, damage: 14))
-        let bx = player.position.x + dx * length, by = player.position.y + dy * length
+        let facing = player.facing
+        let range: CGFloat = 120
+        let halfAngle: CGFloat = 40 * (.pi / 180)
+        let fLen = max(0.001, hypot(facing.dx, facing.dy))
+        let ndx = facing.dx / fLen
+        let ndy = facing.dy / fLen
+        let cosHalf = cos(halfAngle)
+        let rangeSq = range * range
+        let farWidth = range * tan(halfAngle) * 2
+
+        // Soft texture wedge — cheap vs SKShapeNode; matches gameplay loadout FX.
+        let cone = SKSpriteNode(texture: FXTextures.softWedge, size: CGSize(width: range, height: farWidth))
+        cone.color = SKColor(red: 1, green: 0.55, blue: 0.12, alpha: 1)
+        cone.colorBlendFactor = 1
+        cone.blendMode = .add
+        cone.alpha = 0.9
+        cone.zPosition = 28
+        cone.anchorPoint = CGPoint(x: 0, y: 0.5)
+        cone.position = player.position
+        cone.zRotation = atan2(ndy, ndx)
+        entityNode.addChild(cone)
+        cone.run(SKAction.sequence([
+            SKAction.group([
+                SKAction.sequence([
+                    SKAction.fadeAlpha(to: 0.75, duration: 0.08),
+                    SKAction.fadeOut(withDuration: 0.32)
+                ]),
+                SKAction.scale(to: 1.12, duration: 0.4)
+            ]),
+            SKAction.removeFromParent()
+        ]))
+
+        let cells = max(1, Int(ceil(range / clerkGrid.cellSize)))
+        let px = player.position.x, py = player.position.y
         hitBuffer.removeAll(keepingCapacity: true)
-        for clerk in clerks {
-            if pointNearSegment(clerk.position, ax: player.position.x, ay: player.position.y, bx: bx, by: by, threshold: 22) {
+        clerkGrid.forEachNearby(to: player.position, cellsRadius: cells) { index in
+            guard index < clerks.count else { return }
+            let clerk = clerks[index]
+            let dx = clerk.position.x - px, dy = clerk.position.y - py
+            let distSq = dx * dx + dy * dy
+            guard distSq <= rangeSq, distSq > 0 else { return }
+            let dist = sqrt(distSq)
+            if (dx * ndx + dy * ndy) / dist >= cosHalf {
                 hitBuffer.append(clerk)
             }
         }
@@ -531,6 +561,7 @@ final class BenchmarkScene: SKScene {
             if flash { flashesLeft -= 1 }
             hitClerk(clerk, damage: 14, from: player.position, knockback: 160, flash: flash)
         }
+        hitCooldown = 0.12
     }
 
     private func fireReceipts() {

@@ -48,6 +48,7 @@ final class GameScene: SKScene {
     private var weaponHitBuffer: [ClerkNode] = []
     private var clerkPool: [ClerkType: [ClerkNode]] = [:]
     private var bagPulsePool: [SKSpriteNode] = []
+    private var laserConePool: [SKSpriteNode] = []
     private var separationParity = 0
     private weak var skView: SKView?
     private var fpsLastTime: TimeInterval = 0
@@ -1011,18 +1012,63 @@ final class GameScene: SKScene {
 
         case .barcodeLaser:
             let facing = player.facing
-            let length: CGFloat = 180 + CGFloat(owned.level) * 20
-            let proj = ProjectileNode(weapon: .barcodeLaser, damage: dmg, life: 0.25, pierce: 99)
-            proj.size = CGSize(width: length, height: 12)
-            proj.anchorPoint = CGPoint(x: 0, y: 0.5)
-            proj.position = player.position
-            proj.zRotation = atan2(facing.dy, facing.dx)
-            entityNode.addChild(proj)
-            projectiles.append(proj)
-            let beamEnd = CGPoint(x: player.position.x + facing.dx * length, y: player.position.y + facing.dy * length)
+            let range = owned.kind.laserRange(level: owned.level)
+            let halfAngle = owned.kind.laserHalfAngle(level: owned.level)
+            let fLen = max(0.001, hypot(facing.dx, facing.dy))
+            let ndx = facing.dx / fLen
+            let ndy = facing.dy / fLen
+            let cosHalf = cos(halfAngle)
+            let rangeSq = range * range
+            let farWidth = range * tan(halfAngle) * 2
+
+            if session.reducedFX == false {
+                let cone: SKSpriteNode
+                if let reused = laserConePool.popLast() {
+                    cone = reused
+                    cone.removeAllActions()
+                    cone.setScale(1)
+                    cone.alpha = 0.9
+                } else {
+                    cone = SKSpriteNode(texture: FXTextures.softWedge, size: CGSize(width: range, height: farWidth))
+                    cone.color = SKColor(red: 1, green: 0.55, blue: 0.12, alpha: 1)
+                    cone.colorBlendFactor = 1
+                    cone.blendMode = .add
+                    cone.zPosition = 28
+                    cone.anchorPoint = CGPoint(x: 0, y: 0.5)
+                }
+                cone.size = CGSize(width: range, height: farWidth)
+                cone.alpha = 0.9
+                cone.position = player.position
+                cone.zRotation = atan2(ndy, ndx)
+                entityNode.addChild(cone)
+                cone.run(SKAction.sequence([
+                    SKAction.group([
+                        SKAction.sequence([
+                            SKAction.fadeAlpha(to: 0.75, duration: 0.08),
+                            SKAction.fadeOut(withDuration: 0.32)
+                        ]),
+                        SKAction.scale(to: 1.12, duration: 0.4)
+                    ]),
+                    SKAction.run { [weak self] in
+                        cone.removeFromParent()
+                        self?.laserConePool.append(cone)
+                    }
+                ]))
+            }
+
+            ensureClerkGrid()
+            let cells = max(1, Int(ceil(range / clerkGrid.cellSize)))
             weaponHitBuffer.removeAll(keepingCapacity: true)
-            for clerk in clerks {
-                if pointNearSegment(clerk.position, a: player.position, b: beamEnd, threshold: 22) {
+            let px = player.position.x
+            let py = player.position.y
+            clerkGrid.forEachNearby(to: player.position, cellsRadius: cells) { index in
+                let clerk = clerks[index]
+                let dx = clerk.position.x - px
+                let dy = clerk.position.y - py
+                let distSq = dx * dx + dy * dy
+                guard distSq <= rangeSq, distSq > 0 else { return }
+                let dist = sqrt(distSq)
+                if (dx * ndx + dy * ndy) / dist >= cosHalf {
                     weaponHitBuffer.append(clerk)
                 }
             }
@@ -1484,16 +1530,4 @@ final class GameScene: SKScene {
         )
     }
 
-    private func pointNearSegment(_ p: CGPoint, a: CGPoint, b: CGPoint, threshold: CGFloat) -> Bool {
-        let abx = b.x - a.x
-        let aby = b.y - a.y
-        let apx = p.x - a.x
-        let apy = p.y - a.y
-        let abLen2 = abx * abx + aby * aby
-        guard abLen2 > 0 else { return hypot(apx, apy) < threshold }
-        let t = max(0, min(1, (apx * abx + apy * aby) / abLen2))
-        let cx = a.x + abx * t
-        let cy = a.y + aby * t
-        return hypot(p.x - cx, p.y - cy) < threshold
-    }
 }

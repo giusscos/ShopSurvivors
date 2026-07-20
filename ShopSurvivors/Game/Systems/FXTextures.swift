@@ -14,4 +14,22 @@ enum FXTextures {
         tex.filteringMode = .linear
         return tex
     }()
+
+    /// Soft white isosceles wedge (apex at left-center) for barcode laser cones.
+    static let softWedge: SKTexture = {
+        let size = CGSize(width: 128, height: 128)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let image = renderer.image { _ in
+            let path = UIBezierPath()
+            path.move(to: CGPoint(x: 2, y: size.height * 0.5))
+            path.addLine(to: CGPoint(x: size.width - 2, y: size.height * 0.06))
+            path.addLine(to: CGPoint(x: size.width - 2, y: size.height * 0.94))
+            path.close()
+            UIColor.white.setFill()
+            path.fill()
+        }
+        let tex = SKTexture(image: image)
+        tex.filteringMode = .linear
+        return tex
+    }()
 }
