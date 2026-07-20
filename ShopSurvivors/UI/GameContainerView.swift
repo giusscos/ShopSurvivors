@@ -20,26 +20,16 @@ struct GameContainerView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
+                // Keep SpriteView outside HUD observation so pitch/budget ticks don't rebuild SKView.
                 SpriteView(scene: scene, preferredFramesPerSecond: UIScreen.main.maximumFramesPerSecond)
                     .ignoresSafeArea()
 
-                VStack {
-                    topHUD
-                    if !session.pickupToast.isEmpty {
-                        Text(session.pickupToast)
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color(red: 0.15, green: 0.35, blue: 0.4).opacity(0.9))
-                            .clipShape(Capsule())
-                            .transition(.opacity)
-                    }
-                    Spacer()
-                    bottomHUD(geo: geo)
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                GameplayHUDOverlay(
+                    session: session,
+                    store: store,
+                    joystickVector: $joystickVector,
+                    viewSize: geo.size
+                )
 
                 if session.isAimingCoupon {
                     VStack {
@@ -78,6 +68,7 @@ struct GameContainerView: View {
             joystickVector = .zero
             session.moveVector = .zero
             AudioManager.shared.playMusic(forceRestart: false)
+            Haptics.prepare()
         }
         .onChange(of: joystickVector.dx) { _, _ in
             session.moveVector = joystickVector
@@ -86,8 +77,36 @@ struct GameContainerView: View {
             session.moveVector = joystickVector
         }
     }
+}
 
-    private func screenToWorld(_ point: CGPoint, in viewSize: CGSize) -> CGPoint {
+/// Isolated so `hudRevision` / budget / pitch banner only invalidate this layer — not SpriteView.
+private struct GameplayHUDOverlay: View {
+    var session: GameSession
+    let store: StoreLevel
+    @Binding var joystickVector: CGVector
+    let viewSize: CGSize
+
+    var body: some View {
+        VStack {
+            topHUD
+            if !session.pickupToast.isEmpty {
+                Text(session.pickupToast)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color(red: 0.15, green: 0.35, blue: 0.4).opacity(0.9))
+                    .clipShape(Capsule())
+                    .transition(.opacity)
+            }
+            Spacer()
+            bottomHUD
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
+
+    private func screenToWorld(_ point: CGPoint) -> CGPoint {
         let dx = point.x - viewSize.width / 2
         let dy = viewSize.height / 2 - point.y
         return CGPoint(
@@ -97,7 +116,6 @@ struct GameContainerView: View {
     }
 
     private var topHUD: some View {
-        // Touch hudRevision so throttled gameplay stats refresh the HUD.
         let _ = session.hudRevision
         return HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
@@ -237,7 +255,8 @@ struct GameContainerView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    private func bottomHUD(geo: GeometryProxy) -> some View {
+    private var bottomHUD: some View {
+        let _ = session.hudRevision
         let showJoystick = !GameControllerManager.shared.isConnected && !GameControllerManager.shared.keyboardActive
         let joystickPaused = session.isPaused || session.isTutorialActive
         let joystickDisabled = session.isPaused || session.isPausedForUpgrade || session.isTutorialActive
@@ -250,7 +269,7 @@ struct GameContainerView: View {
             if session.joystickOnRight {
                 VStack(alignment: .leading, spacing: 8) {
                     weaponChips
-                    couponControl(geo: geo)
+                    couponControl
                 }
                 Spacer()
                 if showJoystick {
@@ -260,7 +279,7 @@ struct GameContainerView: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 8) {
                     weaponChips
-                    couponControl(geo: geo)
+                    couponControl
                 }
             }
         }
@@ -293,9 +312,7 @@ struct GameContainerView: View {
         }
     }
 
-    /// Hold on the button and drag onto the arena; release to drop.
-    private func couponControl(geo: GeometryProxy) -> some View {
-        let _ = session.hudRevision
+    private var couponControl: some View {
         let ready = session.couponCooldown <= 0
         return ZStack {
             Circle()
@@ -334,11 +351,11 @@ struct GameContainerView: View {
                           !session.isPaused,
                           !session.isTutorialActive else { return }
                     session.beginCouponAim()
-                    session.couponAimWorld = screenToWorld(value.location, in: geo.size)
+                    session.couponAimWorld = screenToWorld(value.location)
                 }
                 .onEnded { value in
                     guard session.isAimingCoupon else { return }
-                    session.couponAimWorld = screenToWorld(value.location, in: geo.size)
+                    session.couponAimWorld = screenToWorld(value.location)
                     session.requestCouponDeploy()
                 }
         )

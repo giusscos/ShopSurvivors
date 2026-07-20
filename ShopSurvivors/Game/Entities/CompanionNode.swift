@@ -10,6 +10,7 @@ final class CompanionNode: SKSpriteNode {
     var chatCooldown: TimeInterval = 0
     let walk = WalkAnimator(baseName: "companion")
     let browseSpeed: CGFloat = 55
+    private let statusLabel: SKLabelNode
 
     static let shoppingLines: [String] = [
         "I think I need one more of this!",
@@ -31,6 +32,16 @@ final class CompanionNode: SKSpriteNode {
     init() {
         let tex = SKTexture(imageNamed: "companion_idle")
         tex.filteringMode = .nearest
+        let status = SKLabelNode(fontNamed: "Menlo-Bold")
+        status.name = "status"
+        status.text = "shopping…"
+        status.fontSize = 8
+        status.fontColor = .white
+        status.verticalAlignmentMode = .top
+        status.position = CGPoint(x: 0, y: -20)
+        status.zPosition = 2
+        self.statusLabel = status
+
         super.init(texture: tex, color: .clear, size: CGSize(width: 34, height: 34))
         name = "companion"
         zPosition = 18
@@ -43,15 +54,6 @@ final class CompanionNode: SKSpriteNode {
         tag.position = CGPoint(x: 0, y: 20)
         tag.zPosition = 2
         addChild(tag)
-
-        let status = SKLabelNode(fontNamed: "Menlo-Bold")
-        status.name = "status"
-        status.text = "shopping…"
-        status.fontSize = 8
-        status.fontColor = .white
-        status.verticalAlignmentMode = .top
-        status.position = CGPoint(x: 0, y: -20)
-        status.zPosition = 2
         addChild(status)
     }
 
@@ -61,6 +63,7 @@ final class CompanionNode: SKSpriteNode {
     }
 
     func setStatus(_ text: String) {
-        (childNode(withName: "status") as? SKLabelNode)?.text = text
+        guard statusLabel.text != text else { return }
+        statusLabel.text = text
     }
 }

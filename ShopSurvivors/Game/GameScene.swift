@@ -46,10 +46,16 @@ final class GameScene: SKScene {
     private var couponLureScanAccum: TimeInterval = 0
     private var walkableInterestPoints: [CGPoint] = []
     private var weaponHitBuffer: [ClerkNode] = []
+    private var clerkPool: [ClerkType: [ClerkNode]] = [:]
+    private var bagPulsePool: [SKSpriteNode] = []
+    private var separationParity = 0
     private weak var skView: SKView?
     private var fpsLastTime: TimeInterval = 0
     private var fpsFrameCount = 0
     private var fpsAccum: TimeInterval = 0
+    private var hapticPrepareAccum: TimeInterval = 0
+    private var activePitchLabels = 0
+    private let maxPitchLabels = 3
 
     func configure(session: GameSession, store: StoreLevel) {
         self.session = session
@@ -67,6 +73,7 @@ final class GameScene: SKScene {
         skView = view
         view.preferredFramesPerSecond = UIScreen.main.maximumFramesPerSecond
         view.ignoresSiblingOrder = true
+        view.allowsTransparency = false
 
         addChild(worldNode)
         worldNode.addChild(entityNode)
@@ -79,6 +86,7 @@ final class GameScene: SKScene {
         cameraNode.position = player.position
 
         setupControllerHandlers()
+        Haptics.prepare()
         controllerConnectObserver = NotificationCenter.default.addObserver(
             forName: .GCControllerDidConnect, object: nil, queue: .main
         ) { [weak self] _ in
@@ -183,12 +191,23 @@ final class GameScene: SKScene {
         }
         walkableInterestPoints = interestPoints
 
-        let border = SKShapeNode(rectOf: arenaSize)
-        border.strokeColor = UIColor(store.accentColor).withAlphaComponent(0.6)
-        border.lineWidth = 4
-        border.fillColor = .clear
-        border.zPosition = -8
-        worldNode.addChild(border)
+        let borderColor = UIColor(store.accentColor).withAlphaComponent(0.55)
+        let top = SKSpriteNode(color: borderColor, size: CGSize(width: arenaSize.width, height: 4))
+        top.position = CGPoint(x: 0, y: arenaSize.height / 2)
+        top.zPosition = -8
+        worldNode.addChild(top)
+        let bottom = SKSpriteNode(color: borderColor, size: CGSize(width: arenaSize.width, height: 4))
+        bottom.position = CGPoint(x: 0, y: -arenaSize.height / 2)
+        bottom.zPosition = -8
+        worldNode.addChild(bottom)
+        let right = SKSpriteNode(color: borderColor, size: CGSize(width: 4, height: arenaSize.height))
+        right.position = CGPoint(x: arenaSize.width / 2, y: 0)
+        right.zPosition = -8
+        worldNode.addChild(right)
+        let left = SKSpriteNode(color: borderColor, size: CGSize(width: 4, height: arenaSize.height))
+        left.position = CGPoint(x: -arenaSize.width / 2, y: 0)
+        left.zPosition = -8
+        worldNode.addChild(left)
     }
 
     /// Bake checkerboard / floor tiles into one texture to cut hundreds of scene nodes.
@@ -271,12 +290,29 @@ final class GameScene: SKScene {
         hitFeedbackCooldown = max(0, hitFeedbackCooldown - dt)
         defeatSFXCooldown = max(0, defeatSFXCooldown - dt)
         hudPublishAccumulator += dt
+        hapticPrepareAccum += dt
+        if hapticPrepareAccum >= 2.0 {
+            hapticPrepareAccum = 0
+            Haptics.prepare()
+        }
 
         updateTimer(dt: dt, session: session)
         updatePlayer(dt: dt, session: session)
         updateCompanion(dt: dt)
         updateClerks(dt: dt, session: session)
-        separateClerks()
+        let crowded = clerks.count >= 24
+        separationParity ^= 1
+        if !clerks.isEmpty {
+            clerkGrid.rebuild(count: clerks.count) { clerks[$0].position }
+        }
+        if !crowded || separationParity == 0 {
+            separateClerks(rebuild: false)
+        } else {
+            // Off-frame: still clear pack flags so drain doesn't keep a stale bonus.
+            for clerk in clerks where clerk.hasPackNeighbor {
+                clerk.hasPackNeighbor = false
+            }
+        }
         pushClerksWithPlayer()
         updateBudgetDrain(dt: dt, session: session)
         updateSpawner(dt: dt, session: session)
@@ -623,7 +659,7 @@ final class GameScene: SKScene {
         let companionPos = companion.position
         // Clerks farther than this from the friend update on alternating frames.
         let nearRadiusSq: CGFloat = 320 * 320
-        let crowded = clerks.count >= 28
+        let crowded = clerks.count >= 24
 
         for (index, clerk) in clerks.enumerated() {
             let dxC = clerk.position.x - companionPos.x
@@ -688,7 +724,7 @@ final class GameScene: SKScene {
     }
 
     /// Soft push via spatial grid (near-linear). Also marks upseller pack neighbors.
-    private func separateClerks() {
+    private func separateClerks(rebuild: Bool = true) {
         let count = clerks.count
         guard count > 1 else {
             clerks.first?.hasPackNeighbor = false
@@ -703,13 +739,15 @@ final class GameScene: SKScene {
             clerk.hasPackNeighbor = false
         }
 
-        clerkGrid.rebuild(count: count) { clerks[$0].position }
+        if rebuild {
+            clerkGrid.rebuild(count: count) { clerks[$0].position }
+        }
 
-        // cellSize 64 → radius 2 covers pack distance (~70).
+        // cellSize 64 → radius 1 covers soft-push; pack (~70) is usually in-range too.
         for i in 0..<count {
             let a = clerks[i]
             let ap = a.position
-            clerkGrid.forEachNearby(to: ap, cellsRadius: 2) { j in
+            clerkGrid.forEachNearby(to: ap, cellsRadius: 1) { j in
                 guard j > i else { return }
                 let b = clerks[j]
                 let dx = b.position.x - ap.x
@@ -810,7 +848,7 @@ final class GameScene: SKScene {
                     // One short shake pulse per pitch — do not refresh every drain frame.
                     shakeTime = max(shakeTime, 0.14)
                 }
-                AudioManager.shared.playSFX(.pitch, volume: 0.55)
+                // Single voice clip — dual playSFX used to hitch the audio engine on contact.
                 AudioManager.shared.playSFX(SFX.clerkVoice(clerk.clerkType), volume: 0.7)
             }
         }
@@ -820,7 +858,8 @@ final class GameScene: SKScene {
             if let line = pitchLine {
                 session.pitchBanner = line
                 pitchBannerTimer = 1.4
-                session.publishHUD(force: true)
+                // Throttled — force HUD on every pitch rebuilt SpriteView's parent tree.
+                session.publishHUD()
             }
             if session.budget <= 0 {
                 session.publishHUD(force: true)
@@ -842,7 +881,7 @@ final class GameScene: SKScene {
     }
 
     private func spawnClerk(type: ClerkType) {
-        let clerk = ClerkNode(type: type)
+        let clerk = acquireClerk(type: type)
         let edge = Int.random(in: 0...3)
         let halfW = arenaSize.width / 2 - 20
         let halfH = arenaSize.height / 2 - 20
@@ -856,6 +895,21 @@ final class GameScene: SKScene {
         clerks.append(clerk)
         refreshClerkNameTagsIfNeeded()
         clerk.setNameTagHidden(!shouldShowClerkNameTags)
+    }
+
+    private func acquireClerk(type: ClerkType) -> ClerkNode {
+        if var pool = clerkPool[type], let clerk = pool.popLast() {
+            clerkPool[type] = pool
+            clerk.prepareForReuse()
+            return clerk
+        }
+        return ClerkNode(type: type)
+    }
+
+    private func releaseClerk(_ clerk: ClerkNode) {
+        clerk.prepareForReuse()
+        clerk.removeFromParent()
+        clerkPool[clerk.clerkType, default: []].append(clerk)
     }
 
     private var shouldShowClerkNameTags: Bool {
@@ -933,8 +987,12 @@ final class GameScene: SKScene {
                     weaponHitBuffer.append(clerk)
                 }
             }
+            // Cap white-flash count — tinting dozens of sprites per tick spikes GPU.
+            var flashesLeft = session.reducedFX ? 0 : (clerks.count < 20 ? 6 : 3)
             for clerk in weaponHitBuffer where clerk.parent != nil {
-                hitClerk(clerk, damage: dmg, from: player.position, session: session, knockbackStrength: 90)
+                let flash = flashesLeft > 0
+                if flash { flashesLeft -= 1 }
+                hitClerk(clerk, damage: dmg, from: player.position, session: session, knockbackStrength: 90, flash: flash)
             }
 
         case .receipts:
@@ -961,33 +1019,44 @@ final class GameScene: SKScene {
             proj.zRotation = atan2(facing.dy, facing.dx)
             entityNode.addChild(proj)
             projectiles.append(proj)
+            let beamEnd = CGPoint(x: player.position.x + facing.dx * length, y: player.position.y + facing.dy * length)
+            weaponHitBuffer.removeAll(keepingCapacity: true)
             for clerk in clerks {
-                if pointNearSegment(
-                    clerk.position,
-                    a: player.position,
-                    b: CGPoint(x: player.position.x + facing.dx * length, y: player.position.y + facing.dy * length),
-                    threshold: 22
-                ) {
-                    hitClerk(clerk, damage: dmg, from: player.position, session: session)
+                if pointNearSegment(clerk.position, a: player.position, b: beamEnd, threshold: 22) {
+                    weaponHitBuffer.append(clerk)
                 }
+            }
+            for clerk in weaponHitBuffer where clerk.parent != nil {
+                hitClerk(clerk, damage: dmg, from: player.position, session: session)
             }
 
         case .shoppingBag:
             let radius: CGFloat = 70 + CGFloat(owned.level) * 10
             if session.reducedFX == false {
-                let pulse = SKShapeNode(circleOfRadius: radius)
-                pulse.strokeColor = SKColor(red: 1, green: 0.6, blue: 0.2, alpha: 0.8)
-                pulse.fillColor = SKColor(red: 1, green: 0.7, blue: 0.2, alpha: 0.15)
-                pulse.lineWidth = 3
+                let pulse: SKSpriteNode
+                if let reused = bagPulsePool.popLast() {
+                    pulse = reused
+                    pulse.setScale(1)
+                    pulse.alpha = 0.55
+                } else {
+                    pulse = SKSpriteNode(texture: FXTextures.softCircle, size: CGSize(width: radius * 2, height: radius * 2))
+                    pulse.color = SKColor(red: 1, green: 0.65, blue: 0.25, alpha: 1)
+                    pulse.colorBlendFactor = 1
+                    pulse.alpha = 0.55
+                    pulse.zPosition = 24
+                }
+                pulse.size = CGSize(width: radius * 2, height: radius * 2)
                 pulse.position = player.position
-                pulse.zPosition = 24
                 entityNode.addChild(pulse)
                 pulse.run(SKAction.sequence([
                     SKAction.group([
                         SKAction.fadeOut(withDuration: 0.35),
                         SKAction.scale(to: 1.3, duration: 0.35)
                     ]),
-                    SKAction.removeFromParent()
+                    SKAction.run { [weak self] in
+                        pulse.removeFromParent()
+                        self?.bagPulsePool.append(pulse)
+                    }
                 ]))
             }
             let radiusSq = radius * radius
@@ -1005,7 +1074,7 @@ final class GameScene: SKScene {
                 }
             }
             for clerk in weaponHitBuffer where clerk.parent != nil {
-                hitClerk(clerk, damage: dmg, from: player.position, session: session, knockbackStrength: 280)
+                hitClerk(clerk, damage: dmg, from: player.position, session: session, knockbackStrength: 280, flash: false)
             }
         }
     }
@@ -1018,11 +1087,8 @@ final class GameScene: SKScene {
 
     private func playWeaponFireSFX(_ kind: WeaponKind) {
         switch kind {
-        // Aura ticks very often while overlapping clerks — keep it quiet / occasional.
-        case .priceTags:
-            if hitFeedbackCooldown <= 0 {
-                AudioManager.shared.playSFX(.aura, volume: 0.22)
-            }
+        // Aura feedback comes from hitClerk (shared cooldown) — avoid double SFX per tick.
+        case .priceTags: break
         case .receipts: AudioManager.shared.playSFX(.receipt, volume: 0.4)
         case .barcodeLaser: AudioManager.shared.playSFX(.laser, volume: 0.35)
         case .shoppingBag: AudioManager.shared.playSFX(.bag, volume: 0.45)
@@ -1049,17 +1115,19 @@ final class GameScene: SKScene {
                 let px = proj.position.x
                 let py = proj.position.y
                 ensureClerkGrid()
-                var hit = false
+                var hitClerkRef: ClerkNode?
                 clerkGrid.forEachNearby(to: proj.position, cellsRadius: 1) { index in
-                    guard !hit, index < clerks.count else { return }
+                    guard hitClerkRef == nil, index < clerks.count else { return }
                     let clerk = clerks[index]
                     let dx = clerk.position.x - px
                     let dy = clerk.position.y - py
                     if dx * dx + dy * dy < hitRadiusSq {
-                        hitClerk(clerk, damage: proj.damage, from: proj.position, session: session)
-                        proj.pierceLeft -= 1
-                        hit = true
+                        hitClerkRef = clerk
                     }
+                }
+                if let clerk = hitClerkRef {
+                    hitClerk(clerk, damage: proj.damage, from: proj.position, session: session)
+                    proj.pierceLeft -= 1
                 }
             }
             if proj.pierceLeft > 0 && proj.life > 0 && proj.parent != nil {
@@ -1144,23 +1212,24 @@ final class GameScene: SKScene {
         damage: CGFloat,
         from: CGPoint,
         session: GameSession,
-        knockbackStrength: CGFloat = 160
+        knockbackStrength: CGFloat = 160,
+        flash: Bool? = nil
     ) {
         let dx = clerk.position.x - from.x
         let dy = clerk.position.y - from.y
         let distSq = max(1, dx * dx + dy * dy)
         let dist = sqrt(distSq)
         let kb = CGVector(dx: dx / dist * knockbackStrength, dy: dy / dist * knockbackStrength)
-        // Cheap flash (no SKAction) — AoE used to spawn dozens of colorize actions per tick.
-        let allowFlash = !session.reducedFX && clerks.count < 50
+        let allowFlash = flash ?? (!session.reducedFX && clerks.count < 50)
         clerk.applyDamage(damage, knockback: kb, flash: allowFlash)
 
         // One shared feedback window for SFX / haptics (aura/bag can hit 20+ clerks).
         if hitFeedbackCooldown <= 0 {
             AudioManager.shared.playSFX(.hit, volume: 0.5)
             Haptics.hit()
-            // Longer gate — overlapping aura used to fire haptics ~14×/sec and hitch frames.
-            hitFeedbackCooldown = session.reducedFX ? 0.18 : 0.12
+            // Longer gate under load — contact aura used to fire feedback every tick and hitch frames.
+            let crowded = clerks.count >= 20
+            hitFeedbackCooldown = session.reducedFX ? 0.22 : (crowded ? 0.18 : 0.14)
         }
 
         if clerk.hp <= 0 {
@@ -1192,16 +1261,18 @@ final class GameScene: SKScene {
                 SKAction.fadeOut(withDuration: 0.12),
                 SKAction.scale(to: 0.3, duration: 0.12)
             ]),
-            SKAction.removeFromParent()
+            SKAction.run { [weak self] in
+                self?.releaseClerk(clerk)
+            }
         ]))
     }
 
     private func spawnLevelUpFlash() {
         guard session?.reducedFX != true else { return }
-        let flash = SKShapeNode(circleOfRadius: 40)
-        flash.fillColor = SKColor(red: 0.3, green: 0.9, blue: 1.0, alpha: 0.35)
-        flash.strokeColor = SKColor(red: 0.5, green: 1.0, blue: 1.0, alpha: 0.8)
-        flash.lineWidth = 2
+        let flash = SKSpriteNode(texture: FXTextures.softCircle, size: CGSize(width: 80, height: 80))
+        flash.color = SKColor(red: 0.3, green: 0.9, blue: 1.0, alpha: 1)
+        flash.colorBlendFactor = 1
+        flash.alpha = 0.45
         flash.position = player.position
         flash.zPosition = 45
         entityNode.addChild(flash)
@@ -1282,8 +1353,10 @@ final class GameScene: SKScene {
 
         if shakeTime > 0, session?.reducedFX != true {
             shakeTime -= dt
-            cameraNode.position.x += CGFloat.random(in: -3...3)
-            cameraNode.position.y += CGFloat.random(in: -3...3)
+            // Fixed pattern — avoids CGFloat.random allocation/hitches every shake frame.
+            let phase = CGFloat(shakeTime * 40)
+            cameraNode.position.x += sin(phase) * 2.5
+            cameraNode.position.y += cos(phase * 1.3) * 2.5
         } else if shakeTime > 0 {
             shakeTime = 0
         }
@@ -1296,12 +1369,14 @@ final class GameScene: SKScene {
             pitchBannerTimer -= dt
             if pitchBannerTimer <= 0 {
                 session.pitchBanner = ""
-                session.publishHUD(force: true)
+                session.publishHUD()
             }
         }
     }
 
     private func spawnPitchLabel(_ text: String, at position: CGPoint) {
+        guard activePitchLabels < maxPitchLabels else { return }
+        activePitchLabels += 1
         let label = SKLabelNode(fontNamed: "Menlo-Bold")
         label.text = text
         label.fontSize = 14
@@ -1314,6 +1389,9 @@ final class GameScene: SKScene {
                 SKAction.moveBy(x: 0, y: 30, duration: 0.8),
                 SKAction.fadeOut(withDuration: 0.8)
             ]),
+            SKAction.run { [weak self] in
+                self?.activePitchLabels = max(0, (self?.activePitchLabels ?? 1) - 1)
+            },
             SKAction.removeFromParent()
         ]))
     }
@@ -1376,6 +1454,11 @@ final class GameScene: SKScene {
         previous: CGPoint,
         into p: inout CGPoint
     ) {
+        // Cheap AABB reject before nearest-point math.
+        if p.x < rect.minX - radius || p.x > rect.maxX + radius
+            || p.y < rect.minY - radius || p.y > rect.maxY + radius {
+            return
+        }
         let nearestX = min(max(p.x, rect.minX), rect.maxX)
         let nearestY = min(max(p.y, rect.minY), rect.maxY)
         let dx = p.x - nearestX

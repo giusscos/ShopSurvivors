@@ -7,7 +7,7 @@ final class WalkAnimator {
     private let textures: [SKTexture]
     private var frameIndex = 0
     private var timer: TimeInterval = 0
-    private let frameDuration: TimeInterval = 0.14
+    private let frameDuration: TimeInterval = 0.18
     private var lastFacingSign: CGFloat = 0
 
     init(baseName: String) {
@@ -67,9 +67,12 @@ final class WalkAnimator {
 
         timer += dt
         if timer >= frameDuration {
-            timer = 0
-            frameIndex = frameIndex == 1 ? 2 : 1
-            sprite.texture = textures[frameIndex]
+            timer -= frameDuration
+            let next = frameIndex == 1 ? 2 : 1
+            if next != frameIndex {
+                frameIndex = next
+                sprite.texture = textures[frameIndex]
+            }
         }
     }
 }

@@ -15,7 +15,10 @@ struct SpatialGrid {
     }
 
     mutating func rebuild(count: Int, position: (Int) -> CGPoint) {
-        clear()
+        // Wipe values in place — avoids rehash churn from removeAll every frame.
+        for key in buckets.keys {
+            buckets[key]?.removeAll(keepingCapacity: true)
+        }
         guard count > 0 else { return }
         for i in 0..<count {
             let p = position(i)
@@ -34,7 +37,7 @@ struct SpatialGrid {
         let cy = cellCoord(point.y)
         for gy in (cy - cellsRadius)...(cy + cellsRadius) {
             for gx in (cx - cellsRadius)...(cx + cellsRadius) {
-                guard let list = buckets[pack(gx, gy)] else { continue }
+                guard let list = buckets[pack(gx, gy)], !list.isEmpty else { continue }
                 for index in list {
                     body(index)
                 }

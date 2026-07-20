@@ -65,10 +65,7 @@ final class AudioManager {
     }
 
     func setup() {
-        guard !isSetup else {
-            activateSession()
-            return
-        }
+        guard !isSetup else { return }
         isSetup = true
         activateSession()
         loadMusic()
@@ -152,7 +149,8 @@ final class AudioManager {
             preloadSFX()
         }
         guard let pool = sfxPlayers[sfx.rawValue], !pool.isEmpty else { return }
-        let player = pool.first(where: { !$0.isPlaying }) ?? pool[0]
+        // Prefer a free voice; if all busy, skip rather than restart mid-play (avoids main-thread hitches).
+        guard let player = pool.first(where: { !$0.isPlaying }) else { return }
         player.volume = volume
         player.currentTime = 0
         player.play()

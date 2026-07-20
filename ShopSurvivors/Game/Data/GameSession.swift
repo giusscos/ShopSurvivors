@@ -8,6 +8,7 @@ enum AppScreen: Equatable {
     case title
     case howToPlay
     case settings
+    case benchmark
     case levelSelect
     case playing(storeId: String)
 }
@@ -247,6 +248,15 @@ final class GameSession {
         } else {
             goTitle()
         }
+    }
+
+    func goBenchmark() {
+        resetGameState()
+        screen = .benchmark
+    }
+
+    func leaveBenchmark() {
+        screen = .settings
     }
 
     func goLevelSelect() {

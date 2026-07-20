@@ -16,6 +16,8 @@ struct ContentView: View {
                     HowToPlayView(session: session)
                 case .settings:
                     SettingsView(session: session)
+                case .benchmark:
+                    BenchmarkView(session: session)
                 case .levelSelect:
                     MallHubView(session: session)
                 case .playing(let storeId):

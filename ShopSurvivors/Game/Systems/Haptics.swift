@@ -17,36 +17,38 @@ enum Haptics {
         notify.prepare()
     }
 
+    /// Fire after the current SpriteKit frame so `impactOccurred` cannot stall `update(_:)`.
+    private static func fire(_ work: @escaping @MainActor () -> Void) {
+        DispatchQueue.main.async(execute: work)
+    }
+
     static func shove() {
         guard isEnabled else { return }
-        medium.impactOccurred(intensity: 0.7)
-        // Re-prepare so the next impact does not stall the main thread.
-        medium.prepare()
+        fire { medium.impactOccurred(intensity: 0.7) }
     }
 
     static func hit() {
         guard isEnabled else { return }
-        light.impactOccurred(intensity: 0.45)
-        light.prepare()
+        fire { light.impactOccurred(intensity: 0.45) }
     }
 
     static func levelUp() {
         guard isEnabled else { return }
-        heavy.impactOccurred(intensity: 0.9)
+        fire { heavy.impactOccurred(intensity: 0.9) }
     }
 
     static func win() {
         guard isEnabled else { return }
-        notify.notificationOccurred(.success)
+        fire { notify.notificationOccurred(.success) }
     }
 
     static func lose() {
         guard isEnabled else { return }
-        notify.notificationOccurred(.error)
+        fire { notify.notificationOccurred(.error) }
     }
 
     static func ui() {
         guard isEnabled else { return }
-        light.impactOccurred(intensity: 0.35)
+        fire { light.impactOccurred(intensity: 0.35) }
     }
 }

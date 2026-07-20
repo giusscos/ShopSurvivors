@@ -80,6 +80,17 @@ struct SettingsView: View {
                                     .foregroundStyle(.white.opacity(0.45))
                                     .fixedSize(horizontal: false, vertical: true)
                             }
+
+                            Button {
+                                AudioManager.shared.playSFX(.ui)
+                                Haptics.ui()
+                                session.goBenchmark()
+                            } label: {
+                                settingsRow(
+                                    title: "Run performance benchmark",
+                                    subtitle: "FPS under gameplay-like load: shelves, shove, pitch, combat"
+                                )
+                            }
                         }
 
                         settingsSection("Controls") {

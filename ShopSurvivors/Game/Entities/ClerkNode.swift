@@ -50,6 +50,23 @@ final class ClerkNode: SKSpriteNode {
         colorBlendFactor = 0.75
     }
 
+    func prepareForReuse() {
+        removeAllActions()
+        alpha = 1
+        setScale(1)
+        colorBlendFactor = 0
+        color = .clear
+        knockbackVelocity = .zero
+        lureTarget = nil
+        lureTimeRemaining = 0
+        pitchCooldown = 0
+        hasPackNeighbor = false
+        facingDX = 1
+        hp = clerkType.maxHP
+        xScale = 1
+        nameTag.xScale = 1
+    }
+
     func setNameTagHidden(_ hidden: Bool) {
         nameTag.isHidden = hidden
     }
