@@ -178,10 +178,13 @@ struct StoreLevel: Identifiable, Equatable {
     }
 
     var baseId: String {
-        for suffix in ["_easy", "_hard"] {
-            if id.hasSuffix(suffix) { return String(id.dropLast(suffix.count)) }
-        }
-        return id
+        Self.baseId(from: id)
+    }
+
+    var difficulty: DifficultyTier {
+        if id.hasSuffix("_easy") { return .easy }
+        if id.hasSuffix("_hard") { return .hard }
+        return .normal
     }
 
     static func baseId(from id: String) -> String {

@@ -60,7 +60,7 @@ struct ResultView: View {
                 Button {
                     AudioManager.shared.playSFX(.ui)
                     Haptics.ui()
-                    _ = GameCenterManager.shared.showLeaderboard(storeId: store.id)
+                    _ = GameCenterManager.shared.showLeaderboard(storeId: store.baseId)
                 } label: {
                     Label(GameCenterManager.shared.isAuthenticated ? "Leaderboard" : "Sign in for Leaderboard", systemImage: "trophy.fill")
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
@@ -142,10 +142,11 @@ struct ResultView: View {
         if store.isEndless {
             return "You lasted \(session.formatClock(session.runElapsed)) in Midnight Mall."
         }
+        let difficulty = store.difficulty.displayName.capitalized
         if session.outcome == .won {
-            return String(format: "You escaped \(store.name) with $%.2f left.", Double(session.budget))
+            return String(format: "%@ · You escaped \(store.name) with $%.2f left.", difficulty, Double(session.budget))
         }
-        return "The clerks closed the deal. Try again!"
+        return "\(difficulty) · The clerks closed the deal. Try again!"
     }
 
     private func resultButton(_ title: String, filled: Bool) -> some View {

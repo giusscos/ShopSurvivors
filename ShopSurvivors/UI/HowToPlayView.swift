@@ -3,15 +3,18 @@ import SwiftUI
 struct HowToPlayView: View {
     var session: GameSession
 
-    private let steps: [(title: String, body: String)] = [
-        ("Move", "Use the left joystick to walk around the store."),
-        ("Protect FRIEND", "Your friend browses on their own. Clerks that get close pitch and drain budget."),
-        ("Shove clerks", "Walk into clerks to knock them back and interrupt pitches."),
-        ("LURE coupons", "Hold LURE, drag onto the floor, and release to distract clerks."),
-        ("XP & upgrades", "Defeat clerks, pick up cyan XP gems, and choose an upgrade on level-up."),
-        ("Win the run", "Survive until the timer hits 0:00 with budget left to unlock the next store."),
-        ("Midnight Mall", "Clear all three stores to unlock Endless — last as long as you can.")
-    ]
+    private var steps: [(title: String, body: String)] {
+        let hand = session.joystickOnRight ? "right" : "left"
+        return [
+            ("Move", "Use the \(hand) joystick to walk around the store. Change hand in Settings."),
+            ("Protect FRIEND", "Your friend browses on their own. Clerks that get close pitch and drain budget."),
+            ("Shove clerks", "Walk into clerks to knock them back and interrupt pitches."),
+            ("LURE coupons", "Hold LURE, drag onto the floor, and release to distract clerks."),
+            ("XP & upgrades", "Defeat clerks, pick up cyan XP gems, and choose an upgrade on level-up."),
+            ("Win the run", "Survive until the timer hits 0:00 with budget left to unlock the next store."),
+            ("Midnight Mall", "Clear all three stores to unlock Endless — last as long as you can.")
+        ]
+    }
 
     var body: some View {
         ZStack {

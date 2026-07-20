@@ -15,7 +15,8 @@ enum GameCenterID {
         static let endless     = "leaderboard_endless_survival"
 
         static func forStoreId(_ id: String) -> String? {
-            switch id {
+            // Easy/Hard variants share the base-store board.
+            switch StoreLevel.baseId(from: id) {
             case "electronics": return electronics
             case "fashion":     return fashion
             case "grocery":     return grocery

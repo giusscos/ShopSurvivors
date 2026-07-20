@@ -511,7 +511,7 @@ final class GameSession {
             guard best > 0 else { return nil }
             return "Best \(formatClock(best))"
         }
-        let best = bestBudget(for: store.id)
+        let best = bestBudget(for: store.baseId)
         guard best > 0 else { return nil }
         return String(format: "Best $%.2f", Double(best))
     }
