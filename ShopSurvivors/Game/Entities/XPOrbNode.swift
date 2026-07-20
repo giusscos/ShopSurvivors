@@ -2,6 +2,8 @@ import SpriteKit
 
 final class XPOrbNode: SKSpriteNode {
     let amount: Int
+    /// Seconds until the orb despawns if not collected.
+    var life: TimeInterval = 6.0
 
     init(amount: Int) {
         self.amount = amount

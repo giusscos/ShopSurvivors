@@ -70,10 +70,16 @@ struct SettingsView: View {
                         }
 
                         settingsSection("Display") {
-                            Toggle("Show FPS", isOn: $session.showFPS)
-                                .onChange(of: session.showFPS) { _, _ in
-                                    AudioManager.shared.playSFX(.ui)
-                                }
+                            VStack(alignment: .leading, spacing: 10) {
+                                Toggle("Show diagnostics", isOn: $session.showFPS)
+                                    .onChange(of: session.showFPS) { _, _ in
+                                        AudioManager.shared.playSFX(.ui)
+                                    }
+                                Text("Shows FPS and scene node count in-game. Runs at up to \(UIScreen.main.maximumFramesPerSecond) Hz on this device.")
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.45))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
 
                         settingsSection("Controls") {

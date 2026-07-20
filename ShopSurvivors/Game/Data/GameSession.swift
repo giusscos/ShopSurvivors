@@ -88,6 +88,8 @@ final class GameSession: ObservableObject {
     }
     /// Latest measured FPS (written by GameScene; HUD reads via `hudRevision`).
     var displayedFPS: Int = 0
+    /// Live entity node count in the scene (written by GameScene alongside displayedFPS).
+    var displayedNodeCount: Int = 0
 
     var joystickSize: CGFloat {
         switch joystickSizePreset {

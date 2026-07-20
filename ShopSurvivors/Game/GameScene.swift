@@ -44,6 +44,7 @@ final class GameScene: SKScene {
     private var couponLureScanAccum: TimeInterval = 0
     private var walkableInterestPoints: [CGPoint] = []
     private var weaponHitBuffer: [ClerkNode] = []
+    private weak var skView: SKView?
     private var fpsLastTime: TimeInterval = 0
     private var fpsFrameCount = 0
     private var fpsAccum: TimeInterval = 0
@@ -61,7 +62,8 @@ final class GameScene: SKScene {
         fpsLastTime = 0
         fpsFrameCount = 0
         fpsAccum = 0
-        view.preferredFramesPerSecond = 60
+        skView = view
+        view.preferredFramesPerSecond = UIScreen.main.maximumFramesPerSecond
         view.ignoresSiblingOrder = true
 
         addChild(worldNode)
@@ -298,8 +300,14 @@ final class GameScene: SKScene {
                 fpsLastTime = 0
                 fpsFrameCount = 0
                 fpsAccum = 0
+                skView?.showsNodeCount = false
+                skView?.showsDrawCount = false
             }
             return
+        }
+        if fpsLastTime == 0 {
+            skView?.showsNodeCount = true
+            skView?.showsDrawCount = true
         }
         if fpsLastTime == 0 {
             fpsLastTime = currentTime
@@ -313,6 +321,7 @@ final class GameScene: SKScene {
         fpsAccum += frameDt
         if fpsAccum >= 0.5 {
             session.displayedFPS = max(0, Int((Double(fpsFrameCount) / fpsAccum).rounded()))
+            session.displayedNodeCount = entityNode.children.count
             fpsFrameCount = 0
             fpsAccum = 0
             session.publishHUD()
@@ -1096,6 +1105,16 @@ final class GameScene: SKScene {
         let magnetRangeSq = magnetRange * magnetRange
         var keep: [XPOrbNode] = []
         for orb in xpOrbs {
+            orb.life -= dt
+            if orb.life <= 0 {
+                orb.removeFromParent()
+                continue
+            }
+            // Fade out in the last second so despawn is readable.
+            if orb.life < 1.0 {
+                orb.alpha = CGFloat(orb.life)
+            }
+
             let dx = player.position.x - orb.position.x
             let dy = player.position.y - orb.position.y
             let distSq = dx * dx + dy * dy

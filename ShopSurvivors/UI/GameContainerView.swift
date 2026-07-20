@@ -21,7 +21,7 @@ struct GameContainerView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                SpriteView(scene: scene, preferredFramesPerSecond: 60, options: [.allowsTransparency])
+                SpriteView(scene: scene, preferredFramesPerSecond: UIScreen.main.maximumFramesPerSecond)
                     .ignoresSafeArea()
 
                 VStack {
@@ -135,19 +135,24 @@ struct GameContainerView: View {
 
     private var fpsBadge: some View {
         let fps = session.displayedFPS
-        let color: Color = {
+        let nodes = session.displayedNodeCount
+        let fpsColor: Color = {
             if fps >= 50 { return Color(red: 0.35, green: 0.9, blue: 0.55) }
             if fps >= 28 { return Color(red: 1.0, green: 0.85, blue: 0.3) }
             return Color.red
         }()
-        return Text("\(fps) FPS")
-            .font(.system(size: 12, weight: .bold, design: .monospaced))
-            .foregroundStyle(color)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.black.opacity(0.35))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .accessibilityLabel("\(fps) frames per second")
+        return VStack(alignment: .trailing, spacing: 2) {
+            Text("\(fps) FPS")
+                .foregroundStyle(fpsColor)
+            Text("\(nodes) nodes")
+                .foregroundStyle(Color.white.opacity(0.65))
+        }
+        .font(.system(size: 11, weight: .bold, design: .monospaced))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.black.opacity(0.45))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityLabel("\(fps) frames per second, \(nodes) scene nodes")
     }
 
     private var pauseButton: some View {
