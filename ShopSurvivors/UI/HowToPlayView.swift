@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct HowToPlayView: View {
-    @ObservedObject var session: GameSession
+    var session: GameSession
 
     private let steps: [(title: String, body: String)] = [
         ("Move", "Use the left joystick to walk around the store."),

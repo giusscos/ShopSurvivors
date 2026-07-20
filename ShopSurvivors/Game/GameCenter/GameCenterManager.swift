@@ -1,5 +1,5 @@
-import Combine
 import GameKit
+import Observation
 import OSLog
 import UIKit
 
@@ -39,14 +39,15 @@ enum GameCenterID {
 // MARK: - Manager
 
 @MainActor
-final class GameCenterManager: NSObject, ObservableObject {
+@Observable
+final class GameCenterManager: NSObject {
     static let shared = GameCenterManager()
 
-    @Published var isAuthenticated = false
-    @Published var authFailed = false
-    @Published var statusMessage: String?
+    var isAuthenticated = false
+    var authFailed = false
+    var statusMessage: String?
 
-    private let totalWinsKey = "gcTotalWins"
+    @ObservationIgnored private let totalWinsKey = "gcTotalWins"
 
     private override init() { super.init() }
 

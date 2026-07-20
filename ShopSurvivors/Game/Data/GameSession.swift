@@ -1,5 +1,5 @@
 import Foundation
-import Combine
+import Observation
 import CoreGraphics
 import QuartzCore
 
@@ -18,55 +18,57 @@ enum RunOutcome: Equatable {
 }
 
 @MainActor
-final class GameSession: ObservableObject {
-    @Published var screen: AppScreen
-    @Published var unlockedStoreIndex: Int = 0
-    @Published var mallCleared: Bool = false
+@Observable
+final class GameSession {
+    var screen: AppScreen
+    var unlockedStoreIndex: Int = 0
+    var mallCleared: Bool = false
 
-    /// High-frequency run stats — not @Published; UI refreshes via `hudRevision`.
-    var budget: CGFloat = 100
-    var startingBudget: CGFloat = 100
-    var timeRemaining: TimeInterval = 120
-    var runElapsed: TimeInterval = 0
-    var couponCooldown: TimeInterval = 0
+    /// High-frequency run stats — ignored so UI refreshes only via `hudRevision`.
+    @ObservationIgnored var budget: CGFloat = 100
+    @ObservationIgnored var startingBudget: CGFloat = 100
+    @ObservationIgnored var timeRemaining: TimeInterval = 120
+    @ObservationIgnored var runElapsed: TimeInterval = 0
+    @ObservationIgnored var couponCooldown: TimeInterval = 0
     /// Bumped ~12×/sec (or on force) so SwiftUI HUD can refresh without per-frame thrash.
-    @Published private(set) var hudRevision: UInt = 0
+    private(set) var hudRevision: UInt = 0
 
-    @Published var xp: Int = 0
-    @Published var xpToNext: Int = 12
-    @Published var playerLevel: Int = 1
-    @Published var couponMaxCooldown: TimeInterval = 4.5
-    @Published var isPausedForUpgrade: Bool = false
-    @Published var isPaused: Bool = false
-    @Published var isTutorialActive: Bool = false
-    @Published var isAimingCoupon: Bool = false
-    @Published var upgradeOffers: [UpgradeOffer] = []
-    @Published var outcome: RunOutcome?
-    @Published var weapons: [OwnedWeapon] = []
-    @Published var moveSpeedMultiplier: CGFloat = 1
-    @Published var willpowerMultiplier: CGFloat = 1
-    @Published var pitchBanner: String = ""
-    @Published var runID: UUID = UUID()
-    @Published var pickupToast: String = ""
-    @Published var luresDeployed: Int = 0
+    var xp: Int = 0
+    var xpToNext: Int = 12
+    var playerLevel: Int = 1
+    var couponMaxCooldown: TimeInterval = 4.5
+    var isPausedForUpgrade: Bool = false
+    var isPaused: Bool = false
+    var isTutorialActive: Bool = false
+    var isAimingCoupon: Bool = false
+    var upgradeOffers: [UpgradeOffer] = []
+    var outcome: RunOutcome?
+    var weapons: [OwnedWeapon] = []
+    var moveSpeedMultiplier: CGFloat = 1
+    var willpowerMultiplier: CGFloat = 1
+    /// Pitch callout text — ignored; refresh via `hudRevision` (avoids SpriteView parent thrash).
+    @ObservationIgnored var pitchBanner: String = ""
+    var runID: UUID = UUID()
+    var pickupToast: String = ""
+    var luresDeployed: Int = 0
     /// When true, gameplay HUD shows a live FPS counter.
-    @Published var showFPS: Bool = false {
+    var showFPS: Bool = false {
         didSet { UserDefaults.standard.set(showFPS, forKey: showFPSKey) }
     }
-    @Published var hapticsEnabled: Bool = true {
+    var hapticsEnabled: Bool = true {
         didSet {
             UserDefaults.standard.set(hapticsEnabled, forKey: hapticsKey)
             Haptics.isEnabled = hapticsEnabled
         }
     }
-    @Published var reducedFX: Bool = false {
+    var reducedFX: Bool = false {
         didSet { UserDefaults.standard.set(reducedFX, forKey: reducedFXKey) }
     }
-    @Published var joystickOnRight: Bool = false {
+    var joystickOnRight: Bool = false {
         didSet { UserDefaults.standard.set(joystickOnRight, forKey: joystickOnRightKey) }
     }
     /// 0 = small, 1 = medium, 2 = large
-    @Published var joystickSizePreset: Int = 1 {
+    var joystickSizePreset: Int = 1 {
         didSet {
             let clamped = min(2, max(0, joystickSizePreset))
             if joystickSizePreset != clamped {
@@ -76,7 +78,7 @@ final class GameSession: ObservableObject {
             UserDefaults.standard.set(clamped, forKey: joystickSizeKey)
         }
     }
-    @Published var joystickOpacity: Double = 1.0 {
+    var joystickOpacity: Double = 1.0 {
         didSet {
             let clamped = min(1.0, max(0.35, joystickOpacity))
             if abs(joystickOpacity - clamped) > 0.001 {
@@ -87,9 +89,9 @@ final class GameSession: ObservableObject {
         }
     }
     /// Latest measured FPS (written by GameScene; HUD reads via `hudRevision`).
-    var displayedFPS: Int = 0
+    @ObservationIgnored var displayedFPS: Int = 0
     /// Live entity node count in the scene (written by GameScene alongside displayedFPS).
-    var displayedNodeCount: Int = 0
+    @ObservationIgnored var displayedNodeCount: Int = 0
 
     var joystickSize: CGFloat {
         switch joystickSizePreset {
@@ -100,38 +102,38 @@ final class GameSession: ObservableObject {
     }
 
     /// Bumps when local bests change so hub UI refreshes.
-    @Published var bestScoresRevision: Int = 0
+    var bestScoresRevision: Int = 0
     /// Non-nil while the difficulty picker overlay should be shown for a store.
-    @Published var pendingStoreForDifficulty: StoreLevel?
+    var pendingStoreForDifficulty: StoreLevel?
 
     /// Joystick input written by SwiftUI, read by SpriteKit each frame.
-    var moveVector: CGVector = .zero
+    @ObservationIgnored var moveVector: CGVector = .zero
     /// Latest camera center in world space (written by GameScene).
-    var cameraWorldPosition: CGPoint = .zero
+    @ObservationIgnored var cameraWorldPosition: CGPoint = .zero
     /// World position to place coupon when aiming ends (set by GameScene / UI).
-    var couponAimWorld: CGPoint?
-    var couponDeployRequested: Bool = false
+    @ObservationIgnored var couponAimWorld: CGPoint?
+    @ObservationIgnored var couponDeployRequested: Bool = false
 
-    private var upgradeQueue: [[UpgradeOffer]] = []
-    private var settingsReturn: AppScreen = .title
-    private var howToPlayReturn: AppScreen = .title
+    @ObservationIgnored private var upgradeQueue: [[UpgradeOffer]] = []
+    @ObservationIgnored private var settingsReturn: AppScreen = .title
+    @ObservationIgnored private var howToPlayReturn: AppScreen = .title
 
-    private let unlockedKey = "unlockedStoreIndex"
-    private let mallClearedKey = "mallCleared"
-    private let tutorialKey = "hasCompletedTutorial"
-    private let introKey = "hasSeenLoreIntro"
-    private let showFPSKey = "showFPS"
-    private let hapticsKey = "hapticsEnabled"
-    private let reducedFXKey = "reducedFX"
-    private let joystickOnRightKey = "joystickOnRight"
-    private let joystickSizeKey = "joystickSizePreset"
-    private let joystickOpacityKey = "joystickOpacity"
-    private let bestBudgetPrefix = "bestBudget_"
-    private let bestEndlessKey = "bestEndlessSeconds"
-    private var toastClearTask: Task<Void, Never>?
-    private var cloudObserver: NSObjectProtocol?
-    private var lastHUDPublishTime: CFTimeInterval = 0
-    private let hudPublishInterval: CFTimeInterval = 1.0 / 12.0
+    @ObservationIgnored private let unlockedKey = "unlockedStoreIndex"
+    @ObservationIgnored private let mallClearedKey = "mallCleared"
+    @ObservationIgnored private let tutorialKey = "hasCompletedTutorial"
+    @ObservationIgnored private let introKey = "hasSeenLoreIntro"
+    @ObservationIgnored private let showFPSKey = "showFPS"
+    @ObservationIgnored private let hapticsKey = "hapticsEnabled"
+    @ObservationIgnored private let reducedFXKey = "reducedFX"
+    @ObservationIgnored private let joystickOnRightKey = "joystickOnRight"
+    @ObservationIgnored private let joystickSizeKey = "joystickSizePreset"
+    @ObservationIgnored private let joystickOpacityKey = "joystickOpacity"
+    @ObservationIgnored private let bestBudgetPrefix = "bestBudget_"
+    @ObservationIgnored private let bestEndlessKey = "bestEndlessSeconds"
+    @ObservationIgnored private var toastClearTask: Task<Void, Never>?
+    @ObservationIgnored private var cloudObserver: NSObjectProtocol?
+    @ObservationIgnored private var lastHUDPublishTime: CFTimeInterval = 0
+    @ObservationIgnored private let hudPublishInterval: CFTimeInterval = 1.0 / 12.0
 
     init() {
         unlockedStoreIndex = UserDefaults.standard.integer(forKey: unlockedKey)

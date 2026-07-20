@@ -20,11 +20,14 @@ enum Haptics {
     static func shove() {
         guard isEnabled else { return }
         medium.impactOccurred(intensity: 0.7)
+        // Re-prepare so the next impact does not stall the main thread.
+        medium.prepare()
     }
 
     static func hit() {
         guard isEnabled else { return }
         light.impactOccurred(intensity: 0.45)
+        light.prepare()
     }
 
     static func levelUp() {

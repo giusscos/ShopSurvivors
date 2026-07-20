@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TitleView: View {
-    @ObservedObject var session: GameSession
+    var session: GameSession
 
     var body: some View {
         GeometryReader { geo in

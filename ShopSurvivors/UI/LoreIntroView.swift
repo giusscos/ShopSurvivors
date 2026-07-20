@@ -2,7 +2,7 @@ import SwiftUI
 
 /// One-time manga-style lore intro shown on first launch.
 struct LoreIntroView: View {
-    @ObservedObject var session: GameSession
+    var session: GameSession
     @State private var pageIndex = 0
     @State private var appeared = false
     @State private var actionPulse = false

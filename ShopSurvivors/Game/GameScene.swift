@@ -36,6 +36,8 @@ final class GameScene: SKScene {
     private var aimGhost: SKNode?
     private var arenaSize = CGSize(width: 1400, height: 900)
     private var shoveSFXCooldown: TimeInterval = 0
+    /// Edge-detect player↔clerk overlap so shove SFX/haptics are not spammed every frame.
+    private var wasShovingClerks = false
     private var controllerConnectObserver: NSObjectProtocol?
     private var lastUpdateTime: TimeInterval = 0
     private var hitFeedbackCooldown: TimeInterval = 0
@@ -739,7 +741,7 @@ final class GameScene: SKScene {
     private func pushClerksWithPlayer() {
         let pushRadius: CGFloat = 30
         let pushRadiusSq = pushRadius * pushRadius
-        var shoved = false
+        var shoving = false
         let px = player.position.x
         let py = player.position.y
         // Reuse clerk grid from separation when available; rebuild if empty.
@@ -755,13 +757,15 @@ final class GameScene: SKScene {
             let dist = sqrt(distSq)
             let strength: CGFloat = 260
             clerk.knockbackVelocity = CGVector(dx: dx / dist * strength, dy: dy / dist * strength)
-            shoved = true
+            shoving = true
         }
-        if shoved, shoveSFXCooldown <= 0 {
+        // Rising edge only — sustained overlap used to fire haptics/SFX ~5×/sec and hitch the main thread.
+        if shoving, !wasShovingClerks, shoveSFXCooldown <= 0 {
             AudioManager.shared.playSFX(.shove, volume: 0.7)
             Haptics.shove()
-            shoveSFXCooldown = 0.2
+            shoveSFXCooldown = 0.35
         }
+        wasShovingClerks = shoving
     }
 
     private func moveClerk(_ clerk: ClerkNode, toward target: CGPoint, speed: CGFloat, dt: TimeInterval) {
@@ -803,6 +807,8 @@ final class GameScene: SKScene {
                 clerk.pitchCooldown = TimeInterval.random(in: 1.8...3.2)
                 if !session.reducedFX {
                     spawnPitchLabel(pitchLine ?? "Sale!", at: clerk.position)
+                    // One short shake pulse per pitch — do not refresh every drain frame.
+                    shakeTime = max(shakeTime, 0.14)
                 }
                 AudioManager.shared.playSFX(.pitch, volume: 0.55)
                 AudioManager.shared.playSFX(SFX.clerkVoice(clerk.clerkType), volume: 0.7)
@@ -811,14 +817,10 @@ final class GameScene: SKScene {
 
         if totalDrain > 0 {
             session.budget = max(0, session.budget - totalDrain)
-            if totalDrain > 0.08 {
-                if !session.reducedFX {
-                    shakeTime = 0.12
-                }
-            }
             if let line = pitchLine {
                 session.pitchBanner = line
                 pitchBannerTimer = 1.4
+                session.publishHUD(force: true)
             }
             if session.budget <= 0 {
                 session.publishHUD(force: true)
@@ -1157,7 +1159,8 @@ final class GameScene: SKScene {
         if hitFeedbackCooldown <= 0 {
             AudioManager.shared.playSFX(.hit, volume: 0.5)
             Haptics.hit()
-            hitFeedbackCooldown = session.reducedFX ? 0.12 : 0.07
+            // Longer gate — overlapping aura used to fire haptics ~14×/sec and hitch frames.
+            hitFeedbackCooldown = session.reducedFX ? 0.18 : 0.12
         }
 
         if clerk.hp <= 0 {
@@ -1293,6 +1296,7 @@ final class GameScene: SKScene {
             pitchBannerTimer -= dt
             if pitchBannerTimer <= 0 {
                 session.pitchBanner = ""
+                session.publishHUD(force: true)
             }
         }
     }

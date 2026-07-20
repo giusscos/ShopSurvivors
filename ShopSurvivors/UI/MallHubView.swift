@@ -2,9 +2,7 @@ import SwiftUI
 import SpriteKit
 
 struct MallHubView: View {
-    @ObservedObject var session: GameSession
-    @ObservedObject private var gc = GameCenterManager.shared
-    @ObservedObject private var controllerManager = GameControllerManager.shared
+    var session: GameSession
     @State private var scene: StoreHubScene
     @State private var joystickVector: CGVector = .zero
     /// Remounts the joystick to cancel any in-progress drag when the picker opens/closes.
@@ -65,7 +63,7 @@ struct MallHubView: View {
                             Haptics.ui()
                             _ = GameCenterManager.shared.showDashboard()
                         } label: {
-                            Image(systemName: gc.isAuthenticated ? "trophy.fill" : "trophy")
+                            Image(systemName: GameCenterManager.shared.isAuthenticated ? "trophy.fill" : "trophy")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(.white)
                                 .frame(width: 36, height: 36)
@@ -92,7 +90,7 @@ struct MallHubView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
 
-                if let msg = gc.statusMessage, !gc.isAuthenticated {
+                if let msg = GameCenterManager.shared.statusMessage, !GameCenterManager.shared.isAuthenticated {
                     Text(msg)
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.65))
@@ -105,7 +103,7 @@ struct MallHubView: View {
                 Spacer()
 
                 HStack(alignment: .bottom) {
-                    if !controllerManager.isConnected && !controllerManager.keyboardActive, !session.joystickOnRight {
+                    if !GameControllerManager.shared.isConnected && !GameControllerManager.shared.keyboardActive, !session.joystickOnRight {
                         mallJoystick
                     }
                     if session.joystickOnRight {
@@ -117,7 +115,7 @@ struct MallHubView: View {
                             .padding(.leading, 24)
                             .padding(.bottom, 24)
                         Spacer()
-                        if !controllerManager.isConnected && !controllerManager.keyboardActive {
+                        if !GameControllerManager.shared.isConnected && !GameControllerManager.shared.keyboardActive {
                             mallJoystick
                         }
                     } else {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct UpgradePickerView: View {
-    @ObservedObject var session: GameSession
+    var session: GameSession
 
     var body: some View {
         ZStack {

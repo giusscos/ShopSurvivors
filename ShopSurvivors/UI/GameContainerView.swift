@@ -2,8 +2,7 @@ import SwiftUI
 import SpriteKit
 
 struct GameContainerView: View {
-    @ObservedObject var session: GameSession
-    @ObservedObject private var controllerManager = GameControllerManager.shared
+    var session: GameSession
     let store: StoreLevel
 
     @State private var scene: GameScene
@@ -239,7 +238,7 @@ struct GameContainerView: View {
     }
 
     private func bottomHUD(geo: GeometryProxy) -> some View {
-        let showJoystick = !controllerManager.isConnected && !controllerManager.keyboardActive
+        let showJoystick = !GameControllerManager.shared.isConnected && !GameControllerManager.shared.keyboardActive
         let joystickPaused = session.isPaused || session.isTutorialActive
         let joystickDisabled = session.isPaused || session.isPausedForUpgrade || session.isTutorialActive
 

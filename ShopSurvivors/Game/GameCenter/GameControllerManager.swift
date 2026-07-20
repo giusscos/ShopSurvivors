@@ -1,14 +1,15 @@
-import Combine
 import GameController
+import Observation
 
 @MainActor
-final class GameControllerManager: ObservableObject {
+@Observable
+final class GameControllerManager {
     static let shared = GameControllerManager()
 
-    @Published var isConnected = false
-    @Published var keyboardActive = false
+    var isConnected = false
+    var keyboardActive = false
 
-    private var monitorsStarted = false
+    @ObservationIgnored private var monitorsStarted = false
 
     private init() {}
 

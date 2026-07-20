@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TutorialOverlayView: View {
-    @ObservedObject var session: GameSession
+    var session: GameSession
     @State private var stepIndex = 0
 
     private let steps: [(title: String, body: String)] = [

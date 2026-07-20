@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @ObservedObject var session: GameSession
+    @Bindable var session: GameSession
     @State private var musicOn = AudioManager.shared.musicEnabled
     @State private var sfxOn = AudioManager.shared.sfxEnabled
     @State private var didReset = false

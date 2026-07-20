@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var session = GameSession()
+    @State private var session = GameSession()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {

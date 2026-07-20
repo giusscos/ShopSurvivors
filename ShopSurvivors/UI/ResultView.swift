@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct ResultView: View {
-    @ObservedObject var session: GameSession
-    @ObservedObject private var gc = GameCenterManager.shared
+    var session: GameSession
     let store: StoreLevel
 
     private var nextStore: StoreLevel? {
@@ -63,7 +62,7 @@ struct ResultView: View {
                     Haptics.ui()
                     _ = GameCenterManager.shared.showLeaderboard(storeId: store.id)
                 } label: {
-                    Label(gc.isAuthenticated ? "Leaderboard" : "Sign in for Leaderboard", systemImage: "trophy.fill")
+                    Label(GameCenterManager.shared.isAuthenticated ? "Leaderboard" : "Sign in for Leaderboard", systemImage: "trophy.fill")
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 16)
@@ -72,7 +71,7 @@ struct ResultView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
 
-                if let msg = gc.statusMessage, !gc.isAuthenticated {
+                if let msg = GameCenterManager.shared.statusMessage, !GameCenterManager.shared.isAuthenticated {
                     Text(msg)
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.5))
