@@ -136,6 +136,15 @@ struct SettingsView: View {
                             }
                         }
 
+                        settingsSection("Legal") {
+                            Link(destination: URL(string: "https://giusscos.it/privacy")!) {
+                                settingsRow(title: "Privacy Policy", subtitle: "How your data is handled")
+                            }
+                            Link(destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!) {
+                                settingsRow(title: "Terms of Service", subtitle: "Apple's standard EULA")
+                            }
+                        }
+
                         settingsSection("Progress") {
                             Button {
                                 AudioManager.shared.playSFX(.ui)

@@ -6,6 +6,9 @@ Shop Survivors
 ## Subtitle (max 30 chars)
 Escape the Sales Assault
 
+## Promotional Text (max 170 chars)
+Clerks are closing in. Auto-fire retail weapons, level up mid-run, and protect the budget across three stores — then survive Midnight Mall forever.
+
 ## Category
 Primary: Games → Action
 Secondary: Games → Arcade
